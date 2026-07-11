@@ -52,7 +52,8 @@ jobs:
     if: >-
       github.event_name == 'pull_request' ||
       (github.event.issue.pull_request != null &&
-       contains(github.event.comment.body, '@review'))
+       contains(github.event.comment.body, '@review') &&
+       contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     permissions:
       contents: 'read'
       issues: 'write'

@@ -15,11 +15,14 @@ on:
 
 jobs:
   review:
-    # Run on PR open/reopen, or when someone comments "@review" on the PR.
+    # Run on PR open/reopen, or when a trusted user comments "@review" on the PR.
+    # The author_association check stops strangers from triggering reviews (and spending
+    # your API credits / runner minutes) on public repos.
     if: >-
       github.event_name == 'pull_request' ||
       (github.event.issue.pull_request != null &&
-       contains(github.event.comment.body, '@review'))
+       contains(github.event.comment.body, '@review') &&
+       contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     permissions:
       contents: 'read'
       issues: 'write'
