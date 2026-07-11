@@ -101,7 +101,7 @@ unless noted.
 | `OPENROUTER_SORT` | `price` | `price` \| `throughput` \| `latency` - how to pick among eligible hosts. `throughput` is a good choice for slower reasoning models |
 | `OPENROUTER_MAXPRICE` | *(none)* | Hard ceiling `"$in,$out"` per 1M tokens, e.g. `"2,6"` |
 | `OPENROUTER_ZDR` | `true` | Zero-data-retention hosts only (on by default). Set `false` to allow non-ZDR hosts |
-| `CONTEXT_BUDGET` | `200000` | Max characters of full changed-file content sent alongside the diff. Sized to fit GLM's context window; raise it for Gemini-only setups on large PRs |
+| `CONTEXT_BUDGET` | `600000` | Max characters of full changed-file content sent alongside the diff. Both Gemini and GLM have ~1M-token context, so this is a cost/latency guard rather than a context limit; the default fits every changed file in a normal PR. Raise or lower to taste |
 | `GEMINI_API_KEY` | - | **Secret** for direct Gemini slots |
 | `OPENROUTER_API_KEY` | - | **Secret** for OpenRouter slots |
 

@@ -100,7 +100,7 @@ jobs:
           # 1) Diff (truncate on a line boundary so we never send a half hunk).
           DIFF="$(gh pr diff "$PR_NUMBER" --repo "$REPO" || true)"
           if [ -z "$DIFF" ]; then echo "Empty diff; nothing to review."; exit 0; fi
-          MAX=100000
+          MAX=200000
           TRUNC_NOTE=""
           if [ "${#DIFF}" -gt "$MAX" ]; then
             DIFF="${DIFF:0:$MAX}"; DIFF="${DIFF%$'\n'*}"
@@ -110,10 +110,10 @@ jobs:
           # 1b) Full current content of the changed files (largest change first) so the model can
           #     reason beyond the diff hunks - callers, helpers, error/fallback paths, and how a value
           #     set in one place is used elsewhere. Budget-bounded; text files only.
-          # ~200k chars of file context + ~100k of diff keeps the whole prompt within GLM's context
-          # window with room for output. Gemini's window is far larger; raise CONTEXT_BUDGET (a repo
-          # Variable) if you only use Gemini and want more context on big PRs.
-          CONTEXT_BUDGET="${CONTEXT_BUDGET:-200000}"
+          # Both Gemini and GLM have ~1M-token context, so this budget is a cost/latency guard, not a
+          # context limit - the default comfortably fits every changed file in a normal PR. Set the
+          # CONTEXT_BUDGET repo Variable to raise or lower it.
+          CONTEXT_BUDGET="${CONTEXT_BUDGET:-600000}"
           FILES_CTX=""; used=0
           CHANGED_JSON="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate 2>/dev/null | jq -s 'add // []' 2>/dev/null || echo '[]')"
           mapfile -t CHANGED < <(printf '%s' "$CHANGED_JSON" | jq -r 'sort_by(-.changes)[] | select(.status != "removed") | .filename' 2>/dev/null || true)
