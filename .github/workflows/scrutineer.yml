@@ -1,0 +1,32 @@
+# Copy this file into a repo you want reviewed, at:
+#   .github/workflows/scrutineer.yml
+#
+# It is the only file the target repo needs. All logic lives in the reusable workflow.
+# Configure which model(s) run via that repo's Variables/Secrets (see the README).
+name: 'Scrutineer'
+
+on:
+  pull_request:
+    types: [opened, reopened]        # auto-review on PR open; re-review on demand via "@review"
+    # Alternatives: add 'synchronize' to review on every push, or swap for
+    # 'ready_for_review' to auto-review when a draft PR is marked ready.
+  issue_comment:
+    types: [created]
+
+jobs:
+  review:
+    # Run on PR open/reopen, or when a trusted user comments "@review" on the PR.
+    # The author_association check stops strangers from triggering reviews (and spending
+    # your API credits / runner minutes) on public repos.
+    if: >-
+      github.event_name == 'pull_request' ||
+      (github.event.issue.pull_request != null &&
+       contains(github.event.comment.body, '@review') &&
+       contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+    permissions:
+      contents: 'read'
+      issues: 'write'
+      pull-requests: 'write'
+    # Pin to a tag (recommended) or a commit SHA rather than @main.
+    uses: 'jonespr1/scrutineer/.github/workflows/review.yml@v1'
+    secrets: inherit
