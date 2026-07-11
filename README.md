@@ -97,12 +97,13 @@ unless noted.
 | `OPENROUTER_HOSTS` | *(none)* | Allow-list of host slugs for OpenRouter slots, e.g. `novita,fireworks,together,gmicloud` |
 | `OPENROUTER_SORT` | `price` | `price` \| `throughput` \| `latency` - how to pick among eligible hosts |
 | `OPENROUTER_MAXPRICE` | *(none)* | Hard ceiling `"$in,$out"` per 1M tokens, e.g. `"2,6"` |
-| `OPENROUTER_ZDR` | *(none)* | `true` to require zero-data-retention hosts (fails closed if none) |
+| `OPENROUTER_ZDR` | `true` | Zero-data-retention hosts only (on by default). Set `false` to allow non-ZDR hosts |
 | `GEMINI_API_KEY` | - | **Secret** for direct Gemini slots |
 | `OPENROUTER_API_KEY` | - | **Secret** for OpenRouter slots |
 
-Every OpenRouter request always sends `data_collection: "deny"` - providers are never permitted
-to train on your code.
+By default every OpenRouter request sends `data_collection: "deny"` **and** requires zero data
+retention, so hosts neither train on nor retain your code. Set `OPENROUTER_ZDR=false` only if
+you need a model whose hosts do not offer ZDR.
 
 ---
 
@@ -234,8 +235,9 @@ A trimmed example of what Scrutineer posts on a PR:
 **Does my Gemini app subscription (Google One AI Premium) work?** No. That is separate from the
 Gemini API. You need an API key from [AI Studio](https://aistudio.google.com/).
 
-**Is my code used to train models?** OpenRouter requests always send `data_collection:"deny"`,
-and Gemini's paid API does not train on your data. Keep secret-scanning on so diffs never carry
+**Is my code used to train models, or retained?** By default OpenRouter requests send
+`data_collection:"deny"` and require zero data retention (no training, no retention), and
+Gemini's paid API does not train on your data. Keep secret-scanning on so diffs never carry
 live credentials.
 
 **Reviews are not posting?** Check the Actions run log. Usually it is a missing or expired key,

@@ -24,13 +24,15 @@
 #                        to a single first-party host (e.g. google/*).
 #   OPENROUTER_SORT      price (default) | throughput | latency
 #   OPENROUTER_MAXPRICE  optional hard ceiling "$in,$out" per 1M tokens, e.g. "2,6"
-#   OPENROUTER_ZDR       "true" to require zero-data-retention hosts (fails closed if none)
+#   OPENROUTER_ZDR       zero-data-retention hosts only. Default: true. Set "false" to allow
+#                        non-ZDR hosts (needed for models that have no ZDR host on OpenRouter).
 #
 # KEYS (repo Secrets; passed via `secrets: inherit` from the caller):
 #   GEMINI_API_KEY       for direct Gemini slots      (https://aistudio.google.com/)
 #   OPENROUTER_API_KEY   for OpenRouter slots         (https://openrouter.ai/)
 #
-# All OpenRouter requests always set data_collection:"deny" (never train on your code).
+# By default OpenRouter requests set data_collection:"deny" AND zero data retention, so hosts
+# neither train on nor retain your code. Set OPENROUTER_ZDR=false to relax retention if needed.
 name: 'Scrutineer (reusable)'
 
 on:
@@ -157,7 +159,8 @@ jobs:
             sort="${OPENROUTER_SORT:-price}"
             base="$(jq -n --arg s "$sort" '{data_collection:"deny", sort:$s, allow_fallbacks:true}')"
             [ -n "${OPENROUTER_HOSTS:-}" ] && base="$(printf '%s' "$base" | jq --arg l "$OPENROUTER_HOSTS" '. + {only:($l|split(",")|map(gsub("^ +| +$";"")))}')"
-            [ "${OPENROUTER_ZDR:-}" = "true" ] && base="$(printf '%s' "$base" | jq '. + {zdr:true}')"
+            # Zero data retention is ON by default; set OPENROUTER_ZDR=false to allow non-ZDR hosts.
+            [ "${OPENROUTER_ZDR:-true}" != "false" ] && base="$(printf '%s' "$base" | jq '. + {zdr:true}')"
             [ -n "${OPENROUTER_MAXPRICE:-}" ] && base="$(printf '%s' "$base" | jq --arg m "$OPENROUTER_MAXPRICE" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:(.[1]|tonumber)}})')"
             prov="$base"
             req="$(jq -n --arg m "$model" --arg p "$PROMPT" --argjson prov "$prov" '{model:$m, messages:[{role:"user",content:$p}], provider:$prov}')"
