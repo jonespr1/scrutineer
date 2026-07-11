@@ -35,6 +35,9 @@ the two small files, and verify it works. Everything it needs is documented belo
 
 - **It just works.** It does one deterministic thing: fetch the diff, ask a model, post the
   review. No fragile agent tool-loops to break.
+- **Reads the whole file, not just the diff.** Each changed file's full current content is sent
+  alongside the diff, so the model catches bugs that depend on code the hunk does not show
+  (callers, error paths, a value set in one place and misused in another).
 - **Your choice of model.** Gemini on its own, Gemini plus a second model, or two models
   entirely via OpenRouter - a genuine second opinion from two independent AIs on the same diff.
 - **Bring one key.** Route everything through OpenRouter and you only need a single account.
@@ -93,11 +96,12 @@ unless noted.
 | Name | Default | Purpose |
 |---|---|---|
 | `REVIEWERS` | `gemini` | 1 to 2 reviewer slots (see above) |
-| `GEMINI_MODEL` | `gemini-flash-latest` | Model for a bare `gemini` slot (use a `*-latest` alias to avoid retired-model errors) |
+| `GEMINI_MODEL` | `gemini-pro-latest` | Model for a bare `gemini` slot. Pro is the default (materially fewer false positives); set `gemini-flash-latest` for lower cost. Use a `*-latest` alias to avoid retired-model errors |
 | `OPENROUTER_HOSTS` | *(none)* | Allow-list of host slugs for OpenRouter slots, e.g. `novita,fireworks,together,gmicloud` |
-| `OPENROUTER_SORT` | `price` | `price` \| `throughput` \| `latency` - how to pick among eligible hosts |
+| `OPENROUTER_SORT` | `price` | `price` \| `throughput` \| `latency` - how to pick among eligible hosts. `throughput` is a good choice for slower reasoning models |
 | `OPENROUTER_MAXPRICE` | *(none)* | Hard ceiling `"$in,$out"` per 1M tokens, e.g. `"2,6"` |
 | `OPENROUTER_ZDR` | `true` | Zero-data-retention hosts only (on by default). Set `false` to allow non-ZDR hosts |
+| `CONTEXT_BUDGET` | `200000` | Max characters of full changed-file content sent alongside the diff. Sized to fit GLM's context window; raise it for Gemini-only setups on large PRs |
 | `GEMINI_API_KEY` | - | **Secret** for direct Gemini slots |
 | `OPENROUTER_API_KEY` | - | **Secret** for OpenRouter slots |
 
@@ -140,11 +144,13 @@ Reviews are a single API call each. Rough per-review cost (a medium PR):
 
 | Model | approx per review |
 |---|---|
-| GLM 5.2 (OpenRouter, cheapest host) | ~0.5 to 1 cent |
+| GLM 5.2 (OpenRouter, cheapest host) | ~1 to 2 cents |
+| Gemini Pro (`gemini-pro-latest`, default) | ~5 to 8 cents |
 | Gemini Flash (`gemini-flash-latest`) | ~2 to 5 cents |
-| Gemini Pro (`gemini-pro-latest`) | ~4 to 6 cents |
 
-At typical volume that is a few dollars a month at most.
+Sending each changed file's full content adds input tokens, which the figures above already
+reflect; input tokens are cheap and the quality gain is large. At typical volume this is still a
+few dollars a month at most.
 
 ---
 
@@ -168,6 +174,12 @@ back to running all reviewers.
 members, and collaborators** (the caller checks `author_association`). This stops strangers from
 triggering reviews - and spending your API credits or runner minutes - on public repos. The
 automatic review on PR open is unaffected.
+
+**No duplicate reviews, always green.** Runs for a single PR are serialised and never cancelled. If
+the current commit was already reviewed and nothing new has been said since, a repeat trigger exits
+as a successful (green) check instead of posting again. So opening a PR and immediately commenting
+`@review` produces one review, not two, and the pipeline reads as a clean success throughout -
+while pushing a new commit or posting a substantive reply still triggers a fresh review.
 
 It deliberately does **not** review on every push or comment (that reviews half-finished work
 and adds noise). To change this, edit the caller's `on:` triggers: add `synchronize` to review
@@ -207,6 +219,17 @@ default branch is protected:
 ```
 
 ---
+
+## Staying up to date
+
+Callers pin the major tag `@v1`, which moves forward as non-breaking fixes and improvements land -
+so you get them automatically on the next review, with nothing to change in your repos. A breaking
+change would ship as a new major tag (`@v2`) that you opt into by bumping the `uses:` ref.
+
+To be notified of new versions, **Watch → Custom → Releases** on this repo, or read the
+[CHANGELOG](CHANGELOG.md). If you prefer to pin an exact version for reproducibility, reference a
+release tag (for example `@v1.1.0`) or a full commit SHA instead of `@v1`, and let Dependabot
+(the `github-actions` ecosystem) open update PRs when a newer version is published.
 
 ## Example review
 
