@@ -114,6 +114,7 @@ jobs:
           # context limit - the default comfortably fits every changed file in a normal PR. Set the
           # CONTEXT_BUDGET repo Variable to raise or lower it.
           CONTEXT_BUDGET="${CONTEXT_BUDGET:-600000}"
+          [[ "$CONTEXT_BUDGET" =~ ^[0-9]+$ ]] || CONTEXT_BUDGET=600000   # ignore a non-numeric override
           FILES_CTX=""; used=0
           CHANGED_JSON="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate 2>/dev/null | jq -s 'add // []' 2>/dev/null || echo '[]')"
           mapfile -t CHANGED < <(printf '%s' "$CHANGED_JSON" | jq -r 'sort_by(-.changes)[] | select(.status != "removed") | .filename' 2>/dev/null || true)
