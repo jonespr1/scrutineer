@@ -43,14 +43,19 @@ on:
       OPENROUTER_API_KEY:
         required: false
 
+# Serialise runs for one PR (so the de-dupe check below can't race) but NEVER cancel one:
+# a cancelled run reads as "it didn't run" in the checks UI. Redundant triggers instead run,
+# find the commit already reviewed, and exit 0 (green). Every trigger ends as a success.
 concurrency:
   group: 'scrutineer-${{ github.event.pull_request.number || github.event.issue.number }}'
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   review:
     runs-on: 'ubuntu-latest'
-    timeout-minutes: 10
+    # Reviewers run in parallel, so wall-clock is the slowest single model call (per-call
+    # ceilings are 300s OpenRouter / 240s Gemini) plus checkout - ~6 min worst case.
+    timeout-minutes: 8
     permissions:
       contents: 'read'
       issues: 'read'
@@ -73,31 +78,71 @@ jobs:
           OPENROUTER_SORT: '${{ vars.OPENROUTER_SORT }}'
           OPENROUTER_MAXPRICE: '${{ vars.OPENROUTER_MAXPRICE }}'
           OPENROUTER_ZDR: '${{ vars.OPENROUTER_ZDR }}'
+          CONTEXT_BUDGET: '${{ vars.CONTEXT_BUDGET }}'
           REPO: '${{ github.repository }}'
           PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
+          COMMENT_BODY: '${{ github.event.comment.body }}'
+          HEAD_SHA: '${{ github.event.pull_request.head.sha }}'
         run: |
           set -euo pipefail
 
           if [ -z "${PR_NUMBER:-}" ]; then echo "No PR number; nothing to review."; exit 0; fi
 
+          # Resolve the PR head commit (pull_request provides it; issue_comment must fetch it).
+          if [ -z "${HEAD_SHA:-}" ]; then
+            HEAD_SHA="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '.head.sha' 2>/dev/null || true)"
+          fi
+          SHORT_SHA="${HEAD_SHA:0:7}"
+
+          # Fetch the comment thread once; reused for de-dupe and for re-review history.
+          COMMENTS_JSON="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate 2>/dev/null | jq -s 'add // []' 2>/dev/null || echo '[]')"
+
           # 1) Diff (truncate on a line boundary so we never send a half hunk).
           DIFF="$(gh pr diff "$PR_NUMBER" --repo "$REPO" || true)"
           if [ -z "$DIFF" ]; then echo "Empty diff; nothing to review."; exit 0; fi
-          MAX=60000
+          MAX=200000
           TRUNC_NOTE=""
           if [ "${#DIFF}" -gt "$MAX" ]; then
             DIFF="${DIFF:0:$MAX}"; DIFF="${DIFF%$'\n'*}"
             TRUNC_NOTE="$(printf '\n\n> Note: diff truncated at a line boundary; only the first part was reviewed.')"
           fi
 
+          # 1b) Full current content of the changed files (largest change first) so the model can
+          #     reason beyond the diff hunks - callers, helpers, error/fallback paths, and how a value
+          #     set in one place is used elsewhere. Budget-bounded; text files only.
+          # Both Gemini and GLM have ~1M-token context, so this budget is a cost/latency guard, not a
+          # context limit - the default comfortably fits every changed file in a normal PR. Set the
+          # CONTEXT_BUDGET repo Variable to raise or lower it.
+          CONTEXT_BUDGET="${CONTEXT_BUDGET:-600000}"
+          [[ "$CONTEXT_BUDGET" =~ ^[0-9]+$ ]] || CONTEXT_BUDGET=600000   # ignore a non-numeric override
+          FILES_CTX=""; used=0
+          CHANGED_JSON="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate 2>/dev/null | jq -s 'add // []' 2>/dev/null || echo '[]')"
+          mapfile -t CHANGED < <(printf '%s' "$CHANGED_JSON" | jq -r 'sort_by(-.changes)[] | select(.status != "removed") | .filename' 2>/dev/null || true)
+          for f in "${CHANGED[@]:-}"; do
+            [ -z "$f" ] && continue
+            case "$f" in *.png|*.jpg|*.jpeg|*.gif|*.ico|*.svg|*.pdf|*.zip|*.gz|*.tar|*.woff|*.woff2|*.ttf|*.eot|*.mp3|*.mp4|*.wav|*.lock|*.min.js|*.min.css) continue ;; esac
+            # URL-encode the path (preserving slashes) so paths with spaces resolve; strip any invalid
+            # UTF-8 (a binary file with an unlisted extension) so it can never break the JSON encode.
+            f_enc="$(printf '%s' "$f" | jq -sRr @uri | sed 's/%2F/\//g')"
+            content="$(gh api "repos/${REPO}/contents/${f_enc}?ref=${HEAD_SHA}" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null | iconv -c -f utf-8 -t utf-8 2>/dev/null || true)"
+            [ -z "$content" ] && continue
+            block="$(printf '\n\n===== FILE: %s (full current content) =====\n%s\n' "$f" "$content")"
+            # Over budget: skip this file but keep trying smaller ones (files are largest-first), and
+            # add the "omitted" note only once.
+            if [ $(( used + ${#block} )) -gt "$CONTEXT_BUDGET" ]; then
+              [ -z "${OMIT_NOTE:-}" ] && { FILES_CTX="${FILES_CTX}$(printf '\n\n> Note: some changed files were omitted from the context to stay within budget.')"; OMIT_NOTE=1; }
+              continue
+            fi
+            FILES_CTX="${FILES_CTX}${block}"; used=$(( used + ${#block} ))
+          done
+
           # 2) Optional per-repo style guide.
           STYLE=""
           [ -f .review/styleguide.md ] && STYLE="$(cat .review/styleguide.md)"
 
           # 3) Prior conversation (our reviews + human replies) for context-aware re-reviews.
-          HISTORY="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate 2>/dev/null | jq -s -r '
-              (add // [])
-              | map(select((.body | startswith("## 🤖 Review")) or (.user.type == "User")))
+          HISTORY="$(printf '%s' "$COMMENTS_JSON" | jq -r '
+              map(select((.body | startswith("## 🤖 Review")) or (.user.type == "User")))
               | map(if (.body | startswith("## 🤖 Review"))
                     then "### Your previous review:\n" + .body
                     else "### Developer response (" + .user.login + "):\n" + .body end)
@@ -107,7 +152,10 @@ jobs:
           # 4) Build the prompt.
           INSTRUCTIONS="$(printf '%s\n' \
             'You are a senior software engineer acting as a second reviewer on a GitHub pull request.' \
-            'Review the current unified diff and write a concise, high-signal review in GitHub markdown.' \
+            'You are given the unified diff AND the full current content of the changed files. Use the full' \
+            'files to reason about code the diff does not show: callers, helpers, error-handling and fallback' \
+            'paths, and how a value written in one place is used elsewhere.' \
+            'Write a concise, high-signal review in GitHub markdown.' \
             '' \
             'Use these sections (omit a severity bucket if it has no items):' \
             '## 📋 Summary - 2-3 sentences on what the PR does and its overall quality.' \
@@ -115,8 +163,15 @@ jobs:
             '  For each finding cite the file and approximate line, and give a specific, actionable fix.' \
             '## ✅ Positives - briefly note anything done well.' \
             '' \
-            'Focus on correctness, security, performance, error handling and missing tests.' \
-            'Only report real, verifiable issues; do not invent problems. If the diff is trivial or looks good, say so plainly.')"
+            'Focus on correctness, security, performance, error handling and missing tests. Pay particular' \
+            'attention to: state that is written but never cleared or invalidated; default values that misbehave' \
+            '(for example a -1 index that silently wraps to the last element in Python); callback or signal' \
+            'wiring; and exception/fallback paths that return stale or wrong data.' \
+            '' \
+            'Report only issues you can tie to a specific line and whose concrete failure path you can state.' \
+            'Before finalising, re-read each flagged line to confirm it really says what you claim and that the' \
+            'surrounding code does not already handle it - do not invent problems. Reserve 🔴 Critical for a' \
+            'demonstrable crash, data loss or security hole. If the change is trivial or looks good, say so plainly.')"
           REREVIEW="$(printf '%s\n' \
             'If a PRIOR CONVERSATION section appears below, this is a RE-REVIEW. Treat it as a continuing two-way conversation:' \
             '- Begin with a "## 🔄 Since last review" section: ✅ Resolved (now fixed), 🤝 Acknowledged (the developer gave a sound reason not to change something and you agree - do not raise it again), ⚠️ Still open.' \
@@ -141,20 +196,41 @@ jobs:
 
           Current unified diff to review:
           ${DIFF}"
+          if [ -n "$FILES_CTX" ]; then
+            PROMPT="${PROMPT}
+
+          Full current content of the changed files (for context beyond the diff):
+          ${FILES_CTX}"
+          fi
 
           # 5) Model callers. Each echoes the review text.
           call_gemini() {
-            local model="$1" req resp text err
+            local model="$1" req resp text err http rc fr why timeout=240
             if [ -z "${GEMINI_API_KEY:-}" ]; then printf '⚠️ GEMINI_API_KEY is not set for this repo.'; return; fi
-            req="$(jq -n --arg p "$PROMPT" '{contents:[{parts:[{text:$p}]}]}')"
-            resp="$(curl -sS -m 180 "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}" -H 'Content-Type: application/json' -d "$req" || true)"
-            text="$(printf '%s' "$resp" | jq -r '.candidates[0].content.parts[0].text // empty')"
-            err="$(printf '%s' "$resp" | jq -r '.error.message // empty')"
-            [ -z "$text" ] && text="$(printf '⚠️ Could not generate review.\n\n```\n%s\n```' "${err:-no response}")"
+            # Build the request and send it via stdin, never argv: PROMPT can be hundreds of KB, which
+            # would blow the OS single-argument limit (~128KB) if passed to jq --arg or curl -d.
+            req="$(printf '%s' "$PROMPT" | jq -Rsc '{contents:[{parts:[{text:.}]}]}')"
+            rc=0; resp="$(printf '%s' "$req" | curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}" -H 'Content-Type: application/json' --data-binary @-)" || rc=$?
+            http=""; case "$resp" in *__HTTP__*) http="${resp##*__HTTP__}"; resp="${resp%__HTTP__*}"; resp="${resp%$'\n'}";; esac
+            text="$(printf '%s' "$resp" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null)"
+            if [ -z "$text" ]; then
+              # Report the actual cause, never a bare "no response".
+              err="$(printf '%s' "$resp" | jq -r '.error.message // empty' 2>/dev/null)"
+              fr="$(printf '%s' "$resp" | jq -r '.candidates[0].finishReason // .promptFeedback.blockReason // empty' 2>/dev/null)"
+              if   [ "$rc" = 28 ];           then why="Gemini did not respond within ${timeout}s (the diff may be too large; try gemini-flash-latest or a smaller PR)"
+              elif [ "$rc" != 0 ];           then why="could not reach the Gemini API (curl exit $rc)"
+              elif [ -n "$err" ];            then why="Gemini API error${http:+ (HTTP $http)}: $err"
+              elif [ "$fr" = "MAX_TOKENS" ]; then why="the model hit its output limit before finishing the review (finishReason=MAX_TOKENS)"
+              elif [ -n "$fr" ];             then why="no review returned (finishReason=$fr - e.g. a SAFETY or RECITATION block)"
+              elif [ -n "$http" ] && [ "$http" != 200 ]; then why="HTTP $http from the Gemini API"
+              else                                why="empty response from the Gemini API (HTTP ${http:-unknown})"
+              fi
+              text="$(printf '⚠️ Could not generate review.\n\n```\n%s\n```' "$why")"
+            fi
             printf '%s' "$text"
           }
           call_openrouter() {
-            local model="$1" req resp text err base prov sort
+            local model="$1" req resp text err base prov sort http rc fr why timeout=300
             if [ -z "${OPENROUTER_API_KEY:-}" ]; then printf '⚠️ OPENROUTER_API_KEY is not set for this repo.'; return; fi
             sort="${OPENROUTER_SORT:-price}"
             base="$(jq -n --arg s "$sort" '{data_collection:"deny", sort:$s, allow_fallbacks:true}')"
@@ -163,27 +239,73 @@ jobs:
             [ "${OPENROUTER_ZDR:-true}" != "false" ] && base="$(printf '%s' "$base" | jq '. + {zdr:true}')"
             [ -n "${OPENROUTER_MAXPRICE:-}" ] && base="$(printf '%s' "$base" | jq --arg m "$OPENROUTER_MAXPRICE" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:(.[1]|tonumber)}})')"
             prov="$base"
-            req="$(jq -n --arg m "$model" --arg p "$PROMPT" --argjson prov "$prov" '{model:$m, messages:[{role:"user",content:$p}], provider:$prov}')"
-            resp="$(curl -sS -m 180 "https://openrouter.ai/api/v1/chat/completions" -H "Authorization: Bearer ${OPENROUTER_API_KEY}" -H 'Content-Type: application/json' -H 'HTTP-Referer: https://github.com' -H 'X-Title: Scrutineer' -d "$req" || true)"
-            text="$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty')"
-            err="$(printf '%s' "$resp" | jq -r '.error.message // empty')"
-            [ -z "$text" ] && text="$(printf '⚠️ Could not generate review.\n\n```\n%s\n```' "${err:-no response}")"
+            # Build the request and send it via stdin, never argv (see call_gemini): the prompt is far
+            # larger than the OS single-argument limit once file context is included.
+            req="$(printf '%s' "$PROMPT" | jq -Rsc --arg m "$model" --argjson prov "$prov" '{model:$m, messages:[{role:"user",content:.}], provider:$prov}')"
+            rc=0; resp="$(printf '%s' "$req" | curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://openrouter.ai/api/v1/chat/completions" -H "Authorization: Bearer ${OPENROUTER_API_KEY}" -H 'Content-Type: application/json' -H 'HTTP-Referer: https://github.com' -H 'X-Title: Scrutineer' --data-binary @-)" || rc=$?
+            http=""; case "$resp" in *__HTTP__*) http="${resp##*__HTTP__}"; resp="${resp%__HTTP__*}"; resp="${resp%$'\n'}";; esac
+            text="$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null)"
+            if [ -z "$text" ]; then
+              # Report the actual cause, never a bare "no response".
+              err="$(printf '%s' "$resp" | jq -r '.error.message // empty' 2>/dev/null)"
+              fr="$(printf '%s' "$resp" | jq -r '.choices[0].finish_reason // empty' 2>/dev/null)"
+              if   [ "$rc" = 28 ];         then why="the model did not respond within ${timeout}s (try OPENROUTER_SORT=throughput, add faster hosts to OPENROUTER_HOSTS, or reduce the diff size)"
+              elif [ "$rc" != 0 ];         then why="could not reach OpenRouter (curl exit $rc)"
+              elif [ -n "$err" ];          then why="OpenRouter error${http:+ (HTTP $http)}: $err"
+              elif [ "$fr" = "length" ];   then why="the model hit its output limit before finishing the review (finish_reason=length)"
+              elif [ -n "$fr" ];           then why="no review content returned (finish_reason=$fr, HTTP ${http:-unknown})"
+              elif [ -n "$http" ] && [ "$http" != 200 ]; then why="HTTP $http from OpenRouter"
+              else                              why="empty response from OpenRouter (HTTP ${http:-unknown}) - likely no host matched the current routing constraints (OPENROUTER_HOSTS / OPENROUTER_ZDR / OPENROUTER_MAXPRICE)"
+              fi
+              text="$(printf '⚠️ Could not generate review.\n\n```\n%s\n```' "$why")"
+            fi
             printf '%s' "$text"
           }
           post_review() {
             local body
-            body="$(printf '## 🤖 Review - `%s`\n\n%s%s\n\n<sub>Automated review - not a substitute for human review.</sub>' "$1" "$2" "$TRUNC_NOTE")"
+            # The trailing HTML comment is invisible in the rendered review but lets a later run
+            # detect that this slot already reviewed this exact commit (see already_reviewed).
+            body="$(printf '## 🤖 Review - `%s`\n\n%s%s\n\n<sub>Automated review - not a substitute for human review.</sub>\n<!-- scrutineer sha=%s -->' "$1" "$2" "$TRUNC_NOTE" "${HEAD_SHA:-none}")"
             printf '%s' "$body" | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file -
+          }
+
+          # De-dupe: has this slot already posted a SUCCESSFUL review for the current commit, with no
+          # new developer activity since? If so, skip it. A bare repeat "@review" on an unchanged commit
+          # is a no-op; a new commit (SHA changes) or a substantive reply (not just "@review") re-triggers.
+          already_reviewed() {
+            local label="$1"
+            [ -z "${HEAD_SHA:-}" ] && return 1
+            printf '%s' "$COMMENTS_JSON" | jq -e \
+              --arg head "## 🤖 Review - \`$label\`" --arg sha "sha=$HEAD_SHA" '
+              (map(select(.user.type=="Bot"
+                          and (.body|contains($head))
+                          and (.body|contains($sha))
+                          and ((.body|contains("⚠️ Could not generate review"))|not))) | last) as $a
+              | if $a==null then false
+                else ([ .[] | select(.user.type=="User"
+                          and (.created_at > $a.created_at)
+                          and ((.body|ascii_downcase|gsub("^\\s+";"")|startswith("@review"))|not)) ] | length) == 0
+                end' >/dev/null 2>&1
           }
 
           # A single reviewer slot: direct Gemini, or an OpenRouter model id.
           run_slot() {
-            local spec="$1"
+            local spec="$1" model label text
             case "$spec" in
-              gemini)   echo "Reviewer: gemini (${GEMINI_MODEL:-gemini-flash-latest})"; post_review "${GEMINI_MODEL:-gemini-flash-latest}" "$(call_gemini "${GEMINI_MODEL:-gemini-flash-latest}")" ;;
-              gemini:*) echo "Reviewer: ${spec#gemini:}"; post_review "${spec#gemini:}" "$(call_gemini "${spec#gemini:}")" ;;
-              *)        echo "Reviewer (OpenRouter): $spec"; post_review "$spec (via OpenRouter)" "$(call_openrouter "$spec")" ;;
+              gemini)   model="${GEMINI_MODEL:-gemini-pro-latest}"; label="$model" ;;
+              gemini:*) model="${spec#gemini:}"; label="$model" ;;
+              *)        model="$spec"; label="$spec (via OpenRouter)" ;;
             esac
+            if already_reviewed "$label"; then
+              echo "Skip: '$label' already reviewed ${SHORT_SHA:-?} with no new activity."
+              return 0
+            fi
+            echo "Reviewer: $label"
+            case "$spec" in
+              gemini|gemini:*) text="$(call_gemini "$model")" ;;
+              *)               text="$(call_openrouter "$model")" ;;
+            esac
+            post_review "$label" "$text"
           }
 
           # 6) Decide which slot(s) to run. A comment "@review <arg>" filters which reviewers run:
@@ -195,17 +317,22 @@ jobs:
           case "$FILTER" in all|both|everyone) FILTER="" ;; esac
 
           IFS=',' read -ra SLOTS <<< "${REVIEWERS:-gemini}"
-          ran=0
+          SELECTED=()
           for spec in "${SLOTS[@]}"; do
             spec="${spec//[[:space:]]/}"; [ -z "$spec" ] && continue
             if [ -n "$FILTER" ]; then
               lc="$(printf '%s' "$spec" | tr '[:upper:]' '[:lower:]')"
               case "$lc" in *"$FILTER"*) : ;; *) continue ;; esac
             fi
-            run_slot "$spec"; ran=$((ran + 1))
+            SELECTED+=("$spec")
           done
-          if [ "$ran" -eq 0 ] && [ -n "$FILTER" ]; then
-            echo "Filter '$FILTER' matched no configured reviewer; running all."
-            for spec in "${SLOTS[@]}"; do spec="${spec//[[:space:]]/}"; [ -z "$spec" ] && continue; run_slot "$spec"; done
+          if [ "${#SELECTED[@]}" -eq 0 ]; then
+            [ -n "$FILTER" ] && echo "Filter '$FILTER' matched no configured reviewer; running all."
+            for spec in "${SLOTS[@]}"; do spec="${spec//[[:space:]]/}"; [ -z "$spec" ] && continue; SELECTED+=("$spec"); done
           fi
+
+          # Run the selected slots in PARALLEL; wall-clock is the slowest single model, not the sum.
+          pids=()
+          for spec in "${SELECTED[@]}"; do run_slot "$spec" & pids+=("$!"); done
+          for p in "${pids[@]}"; do wait "$p" || true; done
           echo "Done."
