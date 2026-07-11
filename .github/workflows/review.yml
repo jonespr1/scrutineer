@@ -1,0 +1,208 @@
+# Scrutineer - reusable AI pull-request reviewer.
+#
+# Self-contained: fetches the PR diff + prior review thread, sends it to your chosen
+# model(s) in one call each, and posts the review(s) as PR comments. No agentic tool-loop,
+# no vendor lock-in.
+#
+# CONFIGURE which model(s) review, via repo Variables:
+#   REVIEWERS       Comma-separated list of 1-2 reviewer "slots". Each slot is either:
+#                     gemini                -> Google Gemini API direct (model = GEMINI_MODEL)
+#                     gemini:<model>        -> Google Gemini API direct, specific model
+#                     <openrouter-model-id> -> via OpenRouter, e.g. z-ai/glm-5.2 or
+#                                              google/gemini-2.5-flash
+#                   Default: "gemini". Two slots = two independent reviews (a second opinion).
+#                   Examples:
+#                     REVIEWERS = gemini
+#                     REVIEWERS = gemini, z-ai/glm-5.2
+#                     REVIEWERS = google/gemini-2.5-flash, z-ai/glm-5.2
+#   GEMINI_MODEL    Model for a bare "gemini" slot (default: gemini-flash-latest).
+#
+# OpenRouter routing controls (apply to every OpenRouter slot) - repo Variables:
+#   OPENROUTER_HOSTS     Allow-list of host slugs (e.g. "novita,fireworks,together,gmicloud").
+#                        RECOMMENDED for open-weight models (e.g. GLM): it is the only way to
+#                        guarantee jurisdiction/quality. Leave empty for closed models routed
+#                        to a single first-party host (e.g. google/*).
+#   OPENROUTER_SORT      price (default) | throughput | latency
+#   OPENROUTER_MAXPRICE  optional hard ceiling "$in,$out" per 1M tokens, e.g. "2,6"
+#   OPENROUTER_ZDR       "true" to require zero-data-retention hosts (fails closed if none)
+#
+# KEYS (repo Secrets; passed via `secrets: inherit` from the caller):
+#   GEMINI_API_KEY       for direct Gemini slots      (https://aistudio.google.com/)
+#   OPENROUTER_API_KEY   for OpenRouter slots         (https://openrouter.ai/)
+#
+# All OpenRouter requests always set data_collection:"deny" (never train on your code).
+name: 'Scrutineer (reusable)'
+
+on:
+  workflow_call:
+    secrets:
+      GEMINI_API_KEY:
+        required: false
+      OPENROUTER_API_KEY:
+        required: false
+
+concurrency:
+  group: 'scrutineer-${{ github.event.pull_request.number || github.event.issue.number }}'
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 10
+    permissions:
+      contents: 'read'
+      issues: 'read'
+      pull-requests: 'write'
+    steps:
+      - name: 'Checkout (for optional .review/styleguide.md)'
+        uses: 'actions/checkout@v4'
+        with:
+          persist-credentials: 'false'
+
+      - name: 'Review'
+        shell: 'bash'
+        env:
+          GH_TOKEN: '${{ github.token }}'
+          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
+          OPENROUTER_API_KEY: '${{ secrets.OPENROUTER_API_KEY }}'
+          REVIEWERS: '${{ vars.REVIEWERS }}'
+          GEMINI_MODEL: '${{ vars.GEMINI_MODEL }}'
+          OPENROUTER_HOSTS: '${{ vars.OPENROUTER_HOSTS }}'
+          OPENROUTER_SORT: '${{ vars.OPENROUTER_SORT }}'
+          OPENROUTER_MAXPRICE: '${{ vars.OPENROUTER_MAXPRICE }}'
+          OPENROUTER_ZDR: '${{ vars.OPENROUTER_ZDR }}'
+          REPO: '${{ github.repository }}'
+          PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
+        run: |
+          set -euo pipefail
+
+          if [ -z "${PR_NUMBER:-}" ]; then echo "No PR number; nothing to review."; exit 0; fi
+
+          # 1) Diff (truncate on a line boundary so we never send a half hunk).
+          DIFF="$(gh pr diff "$PR_NUMBER" --repo "$REPO" || true)"
+          if [ -z "$DIFF" ]; then echo "Empty diff; nothing to review."; exit 0; fi
+          MAX=60000
+          TRUNC_NOTE=""
+          if [ "${#DIFF}" -gt "$MAX" ]; then
+            DIFF="${DIFF:0:$MAX}"; DIFF="${DIFF%$'\n'*}"
+            TRUNC_NOTE="$(printf '\n\n> Note: diff truncated at a line boundary; only the first part was reviewed.')"
+          fi
+
+          # 2) Optional per-repo style guide.
+          STYLE=""
+          [ -f .review/styleguide.md ] && STYLE="$(cat .review/styleguide.md)"
+
+          # 3) Prior conversation (our reviews + human replies) for context-aware re-reviews.
+          HISTORY="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate 2>/dev/null | jq -s -r '
+              (add // [])
+              | map(select((.body | startswith("## 🤖 Review")) or (.user.type == "User")))
+              | map(if (.body | startswith("## 🤖 Review"))
+                    then "### Your previous review:\n" + .body
+                    else "### Developer response (" + .user.login + "):\n" + .body end)
+              | join("\n\n---\n\n")' 2>/dev/null || true)"
+          if [ "${#HISTORY}" -gt 20000 ]; then HISTORY="${HISTORY: -20000}"; fi
+
+          # 4) Build the prompt.
+          INSTRUCTIONS="$(printf '%s\n' \
+            'You are a senior software engineer acting as a second reviewer on a GitHub pull request.' \
+            'Review the current unified diff and write a concise, high-signal review in GitHub markdown.' \
+            '' \
+            'Use these sections (omit a severity bucket if it has no items):' \
+            '## 📋 Summary - 2-3 sentences on what the PR does and its overall quality.' \
+            '## 🔍 Findings - bullets grouped as 🔴 Critical, 🟠 High, 🟡 Medium, 🟢 Low.' \
+            '  For each finding cite the file and approximate line, and give a specific, actionable fix.' \
+            '## ✅ Positives - briefly note anything done well.' \
+            '' \
+            'Focus on correctness, security, performance, error handling and missing tests.' \
+            'Only report real, verifiable issues; do not invent problems. If the diff is trivial or looks good, say so plainly.')"
+          REREVIEW="$(printf '%s\n' \
+            'If a PRIOR CONVERSATION section appears below, this is a RE-REVIEW. Treat it as a continuing two-way conversation:' \
+            '- Begin with a "## 🔄 Since last review" section: ✅ Resolved (now fixed), 🤝 Acknowledged (the developer gave a sound reason not to change something and you agree - do not raise it again), ⚠️ Still open.' \
+            '- Do NOT repeat resolved or acknowledged items under Findings; only include new or still-unresolved issues.' \
+            '- If you disagree with a developer response, keep it open and briefly explain why. Change your mind when the reasoning is sound.')"
+          PROMPT="${INSTRUCTIONS}
+
+          ${REREVIEW}"
+          if [ -n "$STYLE" ]; then
+            PROMPT="${PROMPT}
+
+          Team style guide to enforce:
+          ${STYLE}"
+          fi
+          if [ -n "$HISTORY" ]; then
+            PROMPT="${PROMPT}
+
+          PRIOR CONVERSATION (your earlier reviews and the developer's responses, oldest first):
+          ${HISTORY}"
+          fi
+          PROMPT="${PROMPT}
+
+          Current unified diff to review:
+          ${DIFF}"
+
+          # 5) Model callers. Each echoes the review text.
+          call_gemini() {
+            local model="$1" req resp text err
+            if [ -z "${GEMINI_API_KEY:-}" ]; then printf '⚠️ GEMINI_API_KEY is not set for this repo.'; return; fi
+            req="$(jq -n --arg p "$PROMPT" '{contents:[{parts:[{text:$p}]}]}')"
+            resp="$(curl -sS -m 180 "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}" -H 'Content-Type: application/json' -d "$req" || true)"
+            text="$(printf '%s' "$resp" | jq -r '.candidates[0].content.parts[0].text // empty')"
+            err="$(printf '%s' "$resp" | jq -r '.error.message // empty')"
+            [ -z "$text" ] && text="$(printf '⚠️ Could not generate review.\n\n```\n%s\n```' "${err:-no response}")"
+            printf '%s' "$text"
+          }
+          call_openrouter() {
+            local model="$1" req resp text err base prov sort
+            if [ -z "${OPENROUTER_API_KEY:-}" ]; then printf '⚠️ OPENROUTER_API_KEY is not set for this repo.'; return; fi
+            sort="${OPENROUTER_SORT:-price}"
+            base="$(jq -n --arg s "$sort" '{data_collection:"deny", sort:$s, allow_fallbacks:true}')"
+            [ -n "${OPENROUTER_HOSTS:-}" ] && base="$(printf '%s' "$base" | jq --arg l "$OPENROUTER_HOSTS" '. + {only:($l|split(",")|map(gsub("^ +| +$";"")))}')"
+            [ "${OPENROUTER_ZDR:-}" = "true" ] && base="$(printf '%s' "$base" | jq '. + {zdr:true}')"
+            [ -n "${OPENROUTER_MAXPRICE:-}" ] && base="$(printf '%s' "$base" | jq --arg m "$OPENROUTER_MAXPRICE" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:(.[1]|tonumber)}})')"
+            prov="$base"
+            req="$(jq -n --arg m "$model" --arg p "$PROMPT" --argjson prov "$prov" '{model:$m, messages:[{role:"user",content:$p}], provider:$prov}')"
+            resp="$(curl -sS -m 180 "https://openrouter.ai/api/v1/chat/completions" -H "Authorization: Bearer ${OPENROUTER_API_KEY}" -H 'Content-Type: application/json' -H 'HTTP-Referer: https://github.com' -H 'X-Title: Scrutineer' -d "$req" || true)"
+            text="$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty')"
+            err="$(printf '%s' "$resp" | jq -r '.error.message // empty')"
+            [ -z "$text" ] && text="$(printf '⚠️ Could not generate review.\n\n```\n%s\n```' "${err:-no response}")"
+            printf '%s' "$text"
+          }
+          post_review() {
+            local body
+            body="$(printf '## 🤖 Review - `%s`\n\n%s%s\n\n<sub>Automated review - not a substitute for human review.</sub>' "$1" "$2" "$TRUNC_NOTE")"
+            printf '%s' "$body" | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file -
+          }
+
+          # A single reviewer slot: direct Gemini, or an OpenRouter model id.
+          run_slot() {
+            local spec="$1"
+            case "$spec" in
+              gemini)   echo "Reviewer: gemini (${GEMINI_MODEL:-gemini-flash-latest})"; post_review "${GEMINI_MODEL:-gemini-flash-latest}" "$(call_gemini "${GEMINI_MODEL:-gemini-flash-latest}")" ;;
+              gemini:*) echo "Reviewer: ${spec#gemini:}"; post_review "${spec#gemini:}" "$(call_gemini "${spec#gemini:}")" ;;
+              *)        echo "Reviewer (OpenRouter): $spec"; post_review "$spec (via OpenRouter)" "$(call_openrouter "$spec")" ;;
+            esac
+          }
+
+          # 6) Decide which slot(s) to run. A comment "@review <arg>" filters which reviewers run:
+          #      (nothing) / all / both  -> every configured reviewer
+          #      <keyword>               -> reviewers whose model id contains <keyword> (case-insensitive)
+          #    An unmatched keyword falls back to running all (never a silent no-op).
+          #    On PR-open events COMMENT_BODY is empty, so all configured reviewers run.
+          FILTER="$(printf '%s' "${COMMENT_BODY:-}" | grep -ioE '@review[[:space:]]+[[:alnum:]:_./-]+' | head -1 | sed -E 's/^@review[[:space:]]+//I' | tr '[:upper:]' '[:lower:]' || true)"
+          case "$FILTER" in all|both|everyone) FILTER="" ;; esac
+
+          IFS=',' read -ra SLOTS <<< "${REVIEWERS:-gemini}"
+          ran=0
+          for spec in "${SLOTS[@]}"; do
+            spec="${spec//[[:space:]]/}"; [ -z "$spec" ] && continue
+            if [ -n "$FILTER" ]; then
+              lc="$(printf '%s' "$spec" | tr '[:upper:]' '[:lower:]')"
+              case "$lc" in *"$FILTER"*) : ;; *) continue ;; esac
+            fi
+            run_slot "$spec"; ran=$((ran + 1))
+          done
+          if [ "$ran" -eq 0 ] && [ -n "$FILTER" ]; then
+            echo "Filter '$FILTER' matched no configured reviewer; running all."
+            for spec in "${SLOTS[@]}"; do spec="${spec//[[:space:]]/}"; [ -z "$spec" ] && continue; run_slot "$spec"; done
+          fi
+          echo "Done."

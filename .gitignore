@@ -1,0 +1,12 @@
+# Local review artifacts / config
+.review/telemetry.log
+
+# GitHub App credentials, if you ever use them
+gha-creds-*.json
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

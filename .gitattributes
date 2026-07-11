@@ -1,0 +1,4 @@
+* text=auto
+*.yml text eol=lf
+*.sh text eol=lf
+.github/** text eol=lf
