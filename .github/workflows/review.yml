@@ -120,12 +120,17 @@ jobs:
           for f in "${CHANGED[@]:-}"; do
             [ -z "$f" ] && continue
             case "$f" in *.png|*.jpg|*.jpeg|*.gif|*.ico|*.svg|*.pdf|*.zip|*.gz|*.tar|*.woff|*.woff2|*.ttf|*.eot|*.mp3|*.mp4|*.wav|*.lock|*.min.js|*.min.css) continue ;; esac
-            content="$(gh api "repos/${REPO}/contents/${f}?ref=${HEAD_SHA}" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null || true)"
+            # URL-encode the path (preserving slashes) so paths with spaces resolve; strip any invalid
+            # UTF-8 (a binary file with an unlisted extension) so it can never break the JSON encode.
+            f_enc="$(printf '%s' "$f" | jq -sRr @uri | sed 's/%2F/\//g')"
+            content="$(gh api "repos/${REPO}/contents/${f_enc}?ref=${HEAD_SHA}" --jq '.content' 2>/dev/null | base64 -d 2>/dev/null | iconv -c -f utf-8 -t utf-8 2>/dev/null || true)"
             [ -z "$content" ] && continue
             block="$(printf '\n\n===== FILE: %s (full current content) =====\n%s\n' "$f" "$content")"
+            # Over budget: skip this file but keep trying smaller ones (files are largest-first), and
+            # add the "omitted" note only once.
             if [ $(( used + ${#block} )) -gt "$CONTEXT_BUDGET" ]; then
-              FILES_CTX="${FILES_CTX}$(printf '\n\n> Note: some changed files were omitted from the context to stay within budget.')"
-              break
+              [ -z "${OMIT_NOTE:-}" ] && { FILES_CTX="${FILES_CTX}$(printf '\n\n> Note: some changed files were omitted from the context to stay within budget.')"; OMIT_NOTE=1; }
+              continue
             fi
             FILES_CTX="${FILES_CTX}${block}"; used=$(( used + ${#block} ))
           done
@@ -201,10 +206,11 @@ jobs:
           call_gemini() {
             local model="$1" req resp text err http rc fr why timeout=240
             if [ -z "${GEMINI_API_KEY:-}" ]; then printf '⚠️ GEMINI_API_KEY is not set for this repo.'; return; fi
-            req="$(jq -n --arg p "$PROMPT" '{contents:[{parts:[{text:$p}]}]}')"
-            rc=0; resp="$(curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}" -H 'Content-Type: application/json' -d "$req")" || rc=$?
-            http="$(printf '%s' "$resp" | sed -n 's/.*__HTTP__\([0-9]*\)$/\1/p' | tail -1)"
-            resp="$(printf '%s' "$resp" | sed 's/__HTTP__[0-9]*$//')"
+            # Build the request and send it via stdin, never argv: PROMPT can be hundreds of KB, which
+            # would blow the OS single-argument limit (~128KB) if passed to jq --arg or curl -d.
+            req="$(printf '%s' "$PROMPT" | jq -Rsc '{contents:[{parts:[{text:.}]}]}')"
+            rc=0; resp="$(printf '%s' "$req" | curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}" -H 'Content-Type: application/json' --data-binary @-)" || rc=$?
+            http=""; case "$resp" in *__HTTP__*) http="${resp##*__HTTP__}"; resp="${resp%__HTTP__*}"; resp="${resp%$'\n'}";; esac
             text="$(printf '%s' "$resp" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null)"
             if [ -z "$text" ]; then
               # Report the actual cause, never a bare "no response".
@@ -232,10 +238,11 @@ jobs:
             [ "${OPENROUTER_ZDR:-true}" != "false" ] && base="$(printf '%s' "$base" | jq '. + {zdr:true}')"
             [ -n "${OPENROUTER_MAXPRICE:-}" ] && base="$(printf '%s' "$base" | jq --arg m "$OPENROUTER_MAXPRICE" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:(.[1]|tonumber)}})')"
             prov="$base"
-            req="$(jq -n --arg m "$model" --arg p "$PROMPT" --argjson prov "$prov" '{model:$m, messages:[{role:"user",content:$p}], provider:$prov}')"
-            rc=0; resp="$(curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://openrouter.ai/api/v1/chat/completions" -H "Authorization: Bearer ${OPENROUTER_API_KEY}" -H 'Content-Type: application/json' -H 'HTTP-Referer: https://github.com' -H 'X-Title: Scrutineer' -d "$req")" || rc=$?
-            http="$(printf '%s' "$resp" | sed -n 's/.*__HTTP__\([0-9]*\)$/\1/p' | tail -1)"
-            resp="$(printf '%s' "$resp" | sed 's/__HTTP__[0-9]*$//')"
+            # Build the request and send it via stdin, never argv (see call_gemini): the prompt is far
+            # larger than the OS single-argument limit once file context is included.
+            req="$(printf '%s' "$PROMPT" | jq -Rsc --arg m "$model" --argjson prov "$prov" '{model:$m, messages:[{role:"user",content:.}], provider:$prov}')"
+            rc=0; resp="$(printf '%s' "$req" | curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://openrouter.ai/api/v1/chat/completions" -H "Authorization: Bearer ${OPENROUTER_API_KEY}" -H 'Content-Type: application/json' -H 'HTTP-Referer: https://github.com' -H 'X-Title: Scrutineer' --data-binary @-)" || rc=$?
+            http=""; case "$resp" in *__HTTP__*) http="${resp##*__HTTP__}"; resp="${resp%__HTTP__*}"; resp="${resp%$'\n'}";; esac
             text="$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null)"
             if [ -z "$text" ]; then
               # Report the actual cause, never a bare "no response".
