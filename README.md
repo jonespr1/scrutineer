@@ -164,6 +164,11 @@ By default (see the caller workflow):
 Matching is a case-insensitive substring of the model id; an unrecognised keyword safely falls
 back to running all reviewers.
 
+**Who can trigger it:** for security, `@review` comment triggers only run for **repo owners,
+members, and collaborators** (the caller checks `author_association`). This stops strangers from
+triggering reviews - and spending your API credits or runner minutes - on public repos. The
+automatic review on PR open is unaffected.
+
 It deliberately does **not** review on every push or comment (that reviews half-finished work
 and adds noise). To change this, edit the caller's `on:` triggers: add `synchronize` to review
 every push, or use `ready_for_review` to review when a draft PR is marked ready.
