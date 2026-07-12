@@ -112,8 +112,13 @@ function Commit-Caller {
     $r2 = Invoke-PutFile -Repo $Repo -Path $path -ContentB64 $B64 -Message 'Add Scrutineer reviewer' -TargetBranch $nb -Sha $sha2
     if ($r2.Code -ne 0) { throw "Failed writing caller to $Repo`n$($r2.Out)" }
     $pr = gh pr create --repo $Repo --base $Branch --head $nb --title 'Add Scrutineer reviewer' --body 'Adds the Scrutineer AI PR reviewer. Merge to enable.' 2>&1 | Select-Object -Last 1
-    $script:OpenedPRs += "$Repo -> $pr"
-    Write-Host "    PR opened: $pr" -ForegroundColor Green
+    if ($LASTEXITCODE -eq 0) {
+      $script:OpenedPRs += "$Repo -> $pr"
+      Write-Host "    PR opened: $pr" -ForegroundColor Green
+    } else {
+      # e.g. a PR from a previous run already exists — don't record the error text as a URL.
+      Write-Host "    PR create skipped/failed: $pr" -ForegroundColor DarkGray
+    }
     return
   }
   throw "Failed writing caller to $Repo`n$($r.Out)"
