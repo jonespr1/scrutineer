@@ -59,7 +59,12 @@ jobs:
       issues: 'write'
       pull-requests: 'write'
     uses: '{{REF}}'
-    secrets: inherit
+    # Explicit secrets, NOT "secrets: inherit" -- inherit hands the called workflow
+    # every repo secret and trips SAST / secret-scan gates. review.yml declares
+    # exactly these two under on.workflow_call.secrets.
+    secrets:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
 '@
 
 function Assert-Prereqs {
