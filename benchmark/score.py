@@ -39,12 +39,12 @@ PRICES = {
 
 
 def cited_lines(text):
-    """Integers explicitly cited as line references — NOT stray numbers like "11 findings".
+    """Integers explicitly cited as line references — never stray numbers.
 
-    Recognised forms: "line 7", "lines 7-9", "line: 7", "line ~7", "L7", "#7", "path.py:7", "(7)".
-    A bare integer with no line marker is deliberately not treated as a citation, so counts like
-    "11 issues" or "500 tokens" can't fabricate a line hit. (In non-strict scoring the filename
-    match still backstops detection; this keeps --strict honest.)
+    Recognised forms: "line 7", "lines 7-9", "line: 7", "line ~7", and "path.ext:7" (a colon
+    preceded by a filename character). Deliberately NOT treated as citations: a bare "7", a
+    markdown enumerator "(1)"/"(7)", or an issue ref "#7" — each of these was inflating hits.
+    In non-strict scoring the filename match still backstops detection; this keeps --strict honest.
     """
     nums = set()
     # "line 7" / "lines 7" / "line: 7" / "line ~7", including a range "lines 7-9".
@@ -52,12 +52,12 @@ def cited_lines(text):
         nums.add(int(m.group(1)))
         if m.group(2):
             nums.add(int(m.group(2)))
-    # Other explicit location markers only: "L7", "#7", "path:7", "(7)".
-    for pat in (r"\bL(\d{1,4})\b", r"#(\d{1,4})\b", r":(\d{1,4})\b", r"\((\d{1,4})\)"):
-        for m in re.finditer(pat, text):
-            n = int(m.group(1))
-            if 1 <= n <= 9999:
-                nums.add(n)
+    # "path.py:7" / "users.ts:12" — the colon must follow a filename character, so "ratio 3:2"
+    # and "12:30" (digit before the colon) do not match.
+    for m in re.finditer(r"[A-Za-z_)\]]:(\d{1,4})\b", text):
+        n = int(m.group(1))
+        if 1 <= n <= 9999:
+            nums.add(n)
     return nums
 
 
@@ -77,16 +77,28 @@ SEV_EMOJI = ["🔴", "🟠", "🟡"]  # Critical / High / Medium — Low exclude
 
 
 def false_positives(text):
-    """Count concrete Critical/High/Medium findings in a review of the CLEAN fixture."""
-    emoji = sum(text.count(e) for e in SEV_EMOJI)
-    # An explicit "no findings" verdict wins: return the emoji count (0 if none), so a bullet like
-    # "- No Critical issues found" is not miscounted as a false positive by the fallback below.
-    if re.search(r"no (findings|issues|concerns)|looks good|nothing to flag|no bugs", text, re.I):
-        return emoji
-    if emoji:
-        return emoji
-    # No emoji: count bulleted findings that name a blocking severity.
-    return len(re.findall(r"^\s*[-*].*\b(Critical|High|Medium)\b", text, re.I | re.M))
+    """Count concrete Critical/High/Medium findings in a review of the CLEAN control fixture.
+
+    Counts per line: a line is a finding when it is *led* by a severity emoji (🔴/🟠/🟡) or a
+    severity label at the start of a bullet ("**High**", "- Critical:"), and is not a negation.
+    This means:
+      - "No Critical issues found"  -> not led by a severity token (it starts with "No") -> 0
+      - "Overall looks good, but:\n- Critical: missing bounds check" -> the bullet still counts 1
+        (the verdict is judged per line, so polite filler can't mask a real finding)
+      - "high quality"              -> severity word mid-sentence, not led -> 0
+      - "not a 🔴 Critical concern"  -> negation on the line -> 0
+    """
+    count = 0
+    for line in text.splitlines():
+        s = line.strip()
+        led_by_sev = any(e in s for e in SEV_EMOJI) or \
+            re.match(r"^[-*]?\s*\**\s*(Critical|High|Medium)\b", s, re.I)
+        if not led_by_sev:
+            continue
+        if re.search(r"\b(no|not|none|nothing|zero)\b|looks good|nothing to flag", s, re.I):
+            continue
+        count += 1
+    return count
 
 
 def main():

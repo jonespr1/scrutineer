@@ -76,10 +76,15 @@ jobs:
             echo "No result changes to commit."
           else
             git commit -m "benchmark: results for run ${RUN_ID}"
-            # A run may have merged to the branch during the (up to 30-min) benchmark; rebase so the
-            # push is fast-forward instead of failing and losing the paid results.
-            git pull --rebase origin "$GITHUB_REF_NAME" || true
-            git push
+            # A concurrent run may have pushed between our pre-score sync and now. Rebase; if that
+            # conflicts, abort cleanly and skip the push rather than leaving a half-rebased tree and
+            # a failing push — the results are safe in the uploaded artifact (if: always()).
+            if git pull --rebase origin "$GITHUB_REF_NAME"; then
+              git push
+            else
+              git rebase --abort || true
+              echo "Concurrent-run race on RESULTS.md; skipped push (results are in the artifact)."
+            fi
           fi
 
       - name: 'Upload results artifact'
