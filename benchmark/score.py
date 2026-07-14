@@ -103,7 +103,9 @@ def false_positives(text):
     label = r"^[-*>]*\s*\**\s*(Critical|High|Medium)\b\**\s*[:\-–—]"
     for line in text.splitlines():
         s = line.strip()
-        if re.match(r"^[-*>]*\s*(🔴|🟠|🟡)", s) or re.match(label, s, re.I):
+        # `\**` before the emoji mirrors the label regex, so a bolded "- **🔴 Critical:** X"
+        # counts too. A heading "## 🔴 …" still fails (# is neither a bullet nor a bold marker).
+        if re.match(r"^[-*>]*\s*\**\s*(🔴|🟠|🟡)", s) or re.match(label, s, re.I):
             count += 1
     return count
 
