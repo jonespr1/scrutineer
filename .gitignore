@@ -1,6 +1,10 @@
 # Local review artifacts / config
 .review/telemetry.log
 
+# Local benchmark API keys (never committed) - used only for a local benchmark run
+*.keys.local
+benchmark/.keys.local
+
 # GitHub App credentials, if you ever use them
 gha-creds-*.json
 
