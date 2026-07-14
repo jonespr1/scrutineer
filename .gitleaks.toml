@@ -1,0 +1,24 @@
+# scrutineer baseline gitleaks config (see jonespr1/internal-standards assets/gitleaks.toml).
+# Extends the full default ruleset and allowlists only the recurring
+# false-positive sources: Stripe test-mode keys used as doc examples, and fake
+# credentials in test fixtures/mocks. Docs, source, and config stay scanned.
+# Specific verified false positives (if any surface) go in .gitleaksignore.
+title = "scrutineer baseline"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Stripe test-mode keys are not production secrets (docs/examples)."
+regexTarget = "match"
+regexes = ['''sk_test_[0-9a-zA-Z]{10,}''']
+
+[[allowlists]]
+description = "Test fixtures and mocks use fake credentials by design."
+paths = [
+  '''.*\.test\.[tj]sx?$''',
+  '''.*\.spec\.[tj]sx?$''',
+  '''(^|/)__tests__/.*''',
+  '''(^|/)__mocks__/.*''',
+  '''(^|/)tests?/fixtures/.*''',
+]
