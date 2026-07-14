@@ -158,6 +158,9 @@ few dollars a month at most.
 
 By default (see the caller workflow):
 - **Automatic** review when a PR is **opened** or **reopened** (runs all configured reviewers).
+  **Bot-authored PRs (e.g. Dependabot) are skipped** - a full AI review of a routine dependency
+  bump rarely earns its cost, and you can still review one on demand with `@review`. To review bot
+  PRs automatically too, drop the `github.event.pull_request.user.type != 'Bot'` clause from the caller.
 - **On demand** by commenting on the PR, and you can choose which reviewer(s) run:
 
   | Comment | Runs |
