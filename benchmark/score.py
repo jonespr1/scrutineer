@@ -139,7 +139,11 @@ def main():
         except (json.JSONDecodeError, OSError) as e:
             print(f"  skip malformed raw file {os.path.basename(path)}: {e}")
             continue
-        mid = r["model"]
+        mid = r.get("model")
+        fixture = r.get("fixture")
+        if not mid or not fixture:
+            print(f"  skip malformed raw file {os.path.basename(path)}: missing model/fixture key")
+            continue
         m = per_model.setdefault(mid, {
             "model": mid, "spec": r.get("spec", ""), "detected": [], "missed": [],
             "found_weight": 0.0, "missed_crit": 0, "false_positives": 0,
@@ -150,7 +154,7 @@ def main():
         })
         text = r.get("text") or ""
         if r.get("error"):
-            m["errors"].append(f"{r['fixture']}: {r['error']}")
+            m["errors"].append(f"{fixture}: {r['error']}")
         m["latency_ms"].append(r.get("latency_ms", 0))
         pt, ct = r.get("prompt_tokens", 0), r.get("completion_tokens", 0)
         m["prompt_tokens"] += pt
@@ -167,12 +171,12 @@ def main():
                 m["cost"] = (m["cost"] or 0.0) + pt / 1e6 * price[0] + ct / 1e6 * price[1]
                 m["cost_estimated"] = True
 
-        if r["fixture"] in clean_fixtures:
+        if fixture in clean_fixtures:
             m["false_positives"] += false_positives(text)
             continue
 
-        for b in [b for b in bugs if b["fixture"] == r["fixture"]]:
-            if detect(b, text, r["fixture"], strict):
+        for b in [b for b in bugs if b["fixture"] == fixture]:
+            if detect(b, text, fixture, strict):
                 m["detected"].append(b["id"])
                 m["found_weight"] += WEIGHT[b["severity"]]
             else:
