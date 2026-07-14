@@ -68,17 +68,22 @@ jobs:
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
           ./actionlint -color
 
-      # PSScriptAnalyzer — lint setup.ps1 at Error severity (Warnings are visible
-      # in the log but don't fail the gate yet; tighten to Warning later).
+      # PSScriptAnalyzer — lint every .ps1 in the repo. Collect Error AND Warning
+      # so Warnings stay VISIBLE in the log (for future tightening), but fail the
+      # gate only on Error severity for now.
       - name: PSScriptAnalyzer
         shell: pwsh
         run: |
           Set-PSRepository PSGallery -InstallationPolicy Trusted
           Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
-          $findings = Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error
-          if ($findings) {
-            $findings | Format-Table Severity,RuleName,ScriptName,Line,Message -AutoSize | Out-String -Width 240 | Write-Host
-            Write-Error "PSScriptAnalyzer found $($findings.Count) error-severity issue(s)"
+          $all = Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error,Warning
+          if ($all) {
+            $all | Format-Table Severity,RuleName,ScriptName,Line,Message -AutoSize | Out-String -Width 240 | Write-Host
+          } else {
+            Write-Host "PSScriptAnalyzer: clean (no Error or Warning findings)"
+          }
+          $errors = @($all | Where-Object { $_.Severity -eq 'Error' })
+          if ($errors.Count) {
+            Write-Error "PSScriptAnalyzer found $($errors.Count) error-severity issue(s)"
             exit 1
           }
-          Write-Host "PSScriptAnalyzer: clean (Error severity)"
