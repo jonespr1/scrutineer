@@ -54,9 +54,15 @@ jobs:
         with:
           persist-credentials: false
 
-      # actionlint — static checker for GitHub Actions workflow files.
+      # actionlint — static checker for GitHub Actions workflow files. It runs
+      # shellcheck on embedded run: scripts. SC2016 (single-quoted $ won't
+      # expand) is an INFO-level false positive here: review.yml intentionally
+      # single-quotes $ inside jq filters and literal LLM-prompt text. Exclude
+      # just that one code; every other shellcheck finding still gates.
       # TODO: pin the release asset by SHA-256 once verified (as in stour-standards).
       - name: actionlint
+        env:
+          SHELLCHECK_OPTS: "--exclude=SC2016"
         run: |
           set -euo pipefail
           bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
