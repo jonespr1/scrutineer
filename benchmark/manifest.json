@@ -34,6 +34,7 @@
     { "file": "upload_handler.ts",  "language": "typescript", "clean": false },
     { "file": "config_store.go",    "language": "go",         "clean": false },
     { "file": "device_bridge.py",   "language": "python",     "clean": false },
+    { "file": "hard_rate_limit.ts",  "language": "typescript", "clean": false },
     { "file": "string_utils.js",    "language": "javascript", "clean": true }
   ],
   "bugs": [
@@ -111,6 +112,11 @@
       "id": "B15", "fixture": "device_bridge.py", "line": 64, "window": 4, "severity": "Medium", "category": "stale-cache-not-invalidated",
       "title": "Cache never invalidated on failure: an unplugged device is reported as present indefinitely",
       "patterns": ["stale", "invalidat", "never (cleared|reset|invalidated)", "cache.*(stale|not clear|never|wrong)", "unplugged", "last.?known", "returns? .*(cached|stale)"]
+    },
+    {
+      "id": "B16", "fixture": "hard_rate_limit.ts", "line": 40, "window": 8, "severity": "High", "category": "xff-spoofable-leftmost",
+      "title": "Rate-limit key uses the leftmost X-Forwarded-For entry (client-spoofable) -> per-IP limit bypass + row-flood DoS",
+      "patterns": ["x-forwarded-for", "\\bxff\\b", "spoof", "left-?most", "right-?most", "first (entry|ip)", "last (entry|ip)", "client-(spoof|controll|suppli)", "parts\\[0\\]", "bypass.*(rate|limit)", "trusted proxy"]
     }
   ]
 }
