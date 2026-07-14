@@ -79,32 +79,32 @@ SEV_EMOJI = ["🔴", "🟠", "🟡"]  # Critical / High / Medium — Low exclude
 def false_positives(text):
     """Count concrete Critical/High/Medium findings in a review of the CLEAN control fixture.
 
-    Judged per line. A line is a finding when it STARTS with a blocking-severity emoji (🔴/🟠/🟡,
-    after an optional bullet) or an explicit severity label with a delimiter ("- Critical:",
-    "**High** -"). A line that instead STARTS with a negation ("No Critical issues", "None found")
-    is a clearance, not a finding.
+    Judged per line. A line is a finding when it STARTS (after an optional bullet) with a
+    blocking-severity emoji (🔴/🟠/🟡) or a severity label with a delimiter — allowing markdown
+    bold around the word: "- Critical:", "**Critical:**", "- **High** - missing await".
 
-    Consequences (all verified in tests):
-      - "🔴 Critical: input is not sanitized"      -> 1  (the "not" is mid-description, not leading)
-      - "🟡 Medium: does nothing if input empty"    -> 1
+    We deliberately do NOT add a separate negation check. Natural clearances — "No findings",
+    "None found", "🟢 No issues" (🟢 isn't a blocking severity), "## 🔴 Critical Findings" (a
+    heading; '#' precedes the emoji so it isn't at line start) — do not begin with a blocking
+    severity token, so this test already excludes them. A negation check anchored to the line start
+    would be unreachable given that guard, and one that stripped the prefix first would wrongly drop
+    real findings whose description leads with a negation ("🔴 Critical: no bounds check",
+    "not validated"). So the "not" inside a finding's description is correctly still counted.
+
+    Consequences (all covered by tests):
+      - "🔴 Critical: input is not sanitized"      -> 1  (real finding; "not" is mid-description)
+      - "- **High** - missing await"               -> 1  (trailing bold before the delimiter is ok)
       - "Overall looks good, but:\n- Critical: X"   -> 1  (polite filler can't mask the bullet)
-      - "No Critical issues found"                  -> 0  (leading negation / not finding-shaped)
-      - "- High quality code throughout"            -> 0  (no label delimiter after the word)
-      - "Medium confidence in this approach"        -> 0
-      - "## 🔴 Critical Findings" (heading)         -> 0  (emoji not at line start; '#' precedes it)
+      - "No Critical issues found" / "None found"   -> 0  (does not start with a severity token)
+      - "- High quality code throughout"            -> 0  (no delimiter after the word)
+      - "## 🔴 Critical Findings" (heading)         -> 0  (emoji not at line start)
     """
     count = 0
-    label = r"^[-*>]*\s*\**\s*(Critical|High|Medium)\b\s*[:\-–—]"
+    label = r"^[-*>]*\s*\**\s*(Critical|High|Medium)\b\**\s*[:\-–—]"
     for line in text.splitlines():
         s = line.strip()
-        is_finding = re.match(r"^[-*>]*\s*(🔴|🟠|🟡)", s) or re.match(label, s, re.I)
-        if not is_finding:
-            continue
-        # A negation that LEADS the line makes it a clearance, not a finding. Anchored to the start
-        # so "not"/"nothing" inside a finding's description ("input is not sanitized") still counts.
-        if re.match(r"^[-*>]*\s*\**\s*(?:there\s+(?:are|is)\s+)?(no|not|none|nothing|zero)\b", s, re.I):
-            continue
-        count += 1
+        if re.match(r"^[-*>]*\s*(🔴|🟠|🟡)", s) or re.match(label, s, re.I):
+            count += 1
     return count
 
 
