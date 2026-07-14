@@ -1,0 +1,89 @@
+# CI for scrutineer — the cross-vendor PR reviewer holds itself to the Stour
+# standard. This repo is PowerShell + GitHub Actions (no npm), so instead of the
+# Node stour-ci caller it runs the checks that fit its content:
+#   secret-scan (gitleaks, full history) · actionlint · PSScriptAnalyzer.
+#
+# Third-party actions are SHA-pinned. persist-credentials:false on checkout.
+# The weekly schedule is a belt-and-braces full-history secret sweep; the diff
+# scan on each PR is the primary gate. workflow_dispatch runs the full sweep on
+# demand (e.g. to confirm a fresh .gitleaksignore baseline without waiting).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 7 * * 1" # Mondays 07:00 UTC — weekly full-history secret sweep
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "true"
+
+  lint:
+    name: Lint · actionlint · PSScriptAnalyzer
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # actionlint — static checker for GitHub Actions workflow files. It runs
+      # shellcheck on embedded run: scripts. SC2016 (single-quoted $ won't
+      # expand) is an INFO-level false positive here: review.yml intentionally
+      # single-quotes $ inside jq filters and literal LLM-prompt text. Exclude
+      # just that one code; every other shellcheck finding still gates.
+      # TODO: pin the release asset by SHA-256 once verified (as in stour-standards).
+      - name: actionlint
+        env:
+          SHELLCHECK_OPTS: "--exclude=SC2016"
+        run: |
+          set -euo pipefail
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+          ./actionlint -color
+
+      # PSScriptAnalyzer — lint every .ps1 in the repo. Collect Error AND Warning
+      # so Warnings stay VISIBLE in the log (for future tightening), but fail the
+      # gate only on Error severity for now.
+      - name: PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository PSGallery -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+          $all = Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error,Warning
+          if ($all) {
+            $all | Format-Table Severity,RuleName,ScriptName,Line,Message -AutoSize | Out-String -Width 240 | Write-Host
+          } else {
+            Write-Host "PSScriptAnalyzer: clean (no Error or Warning findings)"
+          }
+          $errors = @($all | Where-Object { $_.Severity -eq 'Error' })
+          if ($errors.Count) {
+            Write-Error "PSScriptAnalyzer found $($errors.Count) error-severity issue(s)"
+            exit 1
+          }
