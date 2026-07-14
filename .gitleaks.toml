@@ -1,24 +1,26 @@
 # Stour baseline gitleaks config (see jonespr1/stour-standards assets/gitleaks.toml).
 # Extends the full default ruleset and allowlists only the recurring
-# false-positive sources: Stripe test-mode keys used as doc examples, and fake
-# credentials in test fixtures/mocks. Docs, source, and config stay scanned.
-# Specific verified false positives (if any surface) go in .gitleaksignore.
+# false-positive sources: Stripe test-mode keys used as documentation examples,
+# and fake credentials in test fixtures/mocks. Docs, source, and config stay
+# scanned. Specific verified false positives (if any) go in .gitleaksignore.
+#
+# NB: gitleaks 8.24.x (the version gitleaks-action runs) applies only a SINGLE
+# root [allowlist] table — the [[allowlists]] array form is silently ignored
+# (verified empirically 2026-07-14). Keep this as one [allowlist].
 title = "Stour baseline"
 
 [extend]
 useDefault = true
 
-[[allowlists]]
-description = "Stripe test-mode keys are not production secrets (docs/examples)."
+[allowlist]
+description = "Stripe test-mode keys + test fixtures/mocks (fake creds by design)."
 regexTarget = "match"
-regexes = ['''sk_test_[0-9a-zA-Z]{10,}''']
-
-[[allowlists]]
-description = "Test fixtures and mocks use fake credentials by design."
+regexes = ['''sk_test_[0-9a-zA-Z_-]{10,}''']
 paths = [
   '''.*\.test\.[tj]sx?$''',
   '''.*\.spec\.[tj]sx?$''',
   '''(^|/)__tests__/.*''',
   '''(^|/)__mocks__/.*''',
   '''(^|/)tests?/fixtures/.*''',
+  '''.*\.Tests\.ps1$''',
 ]
