@@ -15,11 +15,14 @@ on:
 
 jobs:
   review:
-    # Run on PR open/reopen, or when a trusted user comments "@review" on the PR.
-    # The author_association check stops strangers from triggering reviews (and spending
-    # your API credits / runner minutes) on public repos.
+    # Run on PR open/reopen - but skip bot-authored PRs (e.g. Dependabot); a full AI review of a
+    # routine dependency bump rarely earns its cost, and you can still review one on demand with
+    # "@review". Also runs when a trusted user comments "@review". The author_association check
+    # stops strangers from triggering reviews (and spending your API credits / runner minutes) on
+    # public repos. To review bot PRs automatically too, drop the `user.type != 'Bot'` clause.
     if: >-
-      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.user.type != 'Bot') ||
       (github.event.issue.pull_request != null &&
        contains(github.event.comment.body, '@review') &&
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
