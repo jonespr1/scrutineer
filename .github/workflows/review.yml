@@ -27,7 +27,7 @@
 #   OPENROUTER_ZDR       zero-data-retention hosts only. Default: true. Set "false" to allow
 #                        non-ZDR hosts (needed for models that have no ZDR host on OpenRouter).
 #
-# KEYS (repo Secrets; passed via `secrets: inherit` from the caller):
+# KEYS (repo Secrets; the caller passes exactly these two explicitly - not `secrets: inherit`):
 #   GEMINI_API_KEY       for direct Gemini slots      (https://aistudio.google.com/)
 #   OPENROUTER_API_KEY   for OpenRouter slots         (https://openrouter.ai/)
 #
