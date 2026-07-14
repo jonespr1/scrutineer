@@ -42,13 +42,16 @@ jobs:
           OPENROUTER_SORT: '${{ vars.OPENROUTER_SORT }}'
           OPENROUTER_ZDR: '${{ vars.OPENROUTER_ZDR }}'
           OPENROUTER_MAXPRICE: '${{ vars.OPENROUTER_MAXPRICE }}'
+          # Inputs pass through env, never interpolated into the script body (avoids shell injection).
+          INPUT_ONLY: '${{ inputs.only }}'
+          INPUT_STRICT: '${{ inputs.strict }}'
         run: |
           set -euo pipefail
           RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
           echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
-          ARGS=(); [ -n "${{ inputs.only }}" ] && ARGS=(--only "${{ inputs.only }}")
+          ARGS=(); [ -n "$INPUT_ONLY" ] && ARGS=(--only "$INPUT_ONLY")
           bash benchmark/run.sh "$RUN_ID" "${ARGS[@]}"
-          SCORE_ARGS=(); [ "${{ inputs.strict }}" = "true" ] && SCORE_ARGS=(--strict)
+          SCORE_ARGS=(); [ "$INPUT_STRICT" = "true" ] && SCORE_ARGS=(--strict)
           python3 benchmark/score.py "$RUN_ID" "${SCORE_ARGS[@]}"
 
       - name: 'Show results'
@@ -64,10 +67,14 @@ jobs:
             echo "No result changes to commit."
           else
             git commit -m "benchmark: results for run ${RUN_ID}"
+            # A run may have merged to the branch during the (up to 30-min) benchmark; rebase so the
+            # push is fast-forward instead of failing and losing the paid results.
+            git pull --rebase origin "$GITHUB_REF_NAME" || true
             git push
           fi
 
       - name: 'Upload results artifact'
+        if: always()   # preserve paid API results for download even if the commit/push step failed
         uses: 'actions/upload-artifact@v4'
         with:
           name: 'benchmark-${{ env.RUN_ID }}'

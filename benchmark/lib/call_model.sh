@@ -18,7 +18,7 @@ SPEC="${1:?spec required}"
 PROMPT_FILE="${2:?prompt file required}"
 PROMPT="$(cat "$PROMPT_FILE")"
 
-now_ms() { date +%s%3N; }
+now_ms() { python3 -c 'import time; print(int(time.time()*1000))'; }  # portable (GNU date %N is not on macOS)
 emit() { # text err prompt_tok completion_tok cost cost_source latency
   jq -n --arg text "$1" --arg err "$2" --argjson pt "${3:-0}" --argjson ct "${4:-0}" \
         --argjson cost "${5:-null}" --arg cs "$6" --argjson lat "${7:-0}" \
@@ -44,6 +44,7 @@ call_gemini() {
     err="$(printf '%s' "$resp" | jq -r '.error.message // empty' 2>/dev/null)"
     fr="$(printf '%s' "$resp" | jq -r '.candidates[0].finishReason // .promptFeedback.blockReason // empty' 2>/dev/null)"
     [ "$rc" = 28 ] && err="timeout after 240s"
+    [ "$rc" != 0 ] && [ -z "$err" ] && err="curl failed with exit code $rc"
     emit "" "${err:-empty response (HTTP ${http:-?}, finishReason=${fr:-?})}" "${pt:-0}" "${ct:-0}" null estimated "$lat"; return
   fi
   emit "$text" "" "${pt:-0}" "${ct:-0}" null estimated "$lat"
@@ -56,7 +57,8 @@ call_openrouter() {
   prov="$(jq -n --arg s "$sort" '{data_collection:"deny", sort:$s, allow_fallbacks:true}')"
   [ -n "${OPENROUTER_HOSTS:-}" ] && prov="$(printf '%s' "$prov" | jq --arg l "$OPENROUTER_HOSTS" '. + {only:($l|split(",")|map(gsub("^ +| +$";"")))}')"
   [ "${OPENROUTER_ZDR:-true}" != "false" ] && prov="$(printf '%s' "$prov" | jq '. + {zdr:true}')"
-  [ -n "${OPENROUTER_MAXPRICE:-}" ] && prov="$(printf '%s' "$prov" | jq --arg m "$OPENROUTER_MAXPRICE" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:(.[1]|tonumber)}})')"
+  # Accept "in,out" or a single value (applied to both) so a lone number can't break the jq encode.
+  [ -n "${OPENROUTER_MAXPRICE:-}" ] && prov="$(printf '%s' "$prov" | jq --arg m "$OPENROUTER_MAXPRICE" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:((.[1] // .[0])|tonumber)}})')"
   # usage.include:true asks OpenRouter to return the native USD cost inline.
   req="$(printf '%s' "$PROMPT" | jq -Rsc --arg m "$model" --argjson prov "$prov" \
     '{model:$m, messages:[{role:"user",content:.}], provider:$prov, usage:{include:true}}')"
@@ -76,6 +78,7 @@ call_openrouter() {
     err="$(printf '%s' "$resp" | jq -r '.error.message // empty' 2>/dev/null)"
     fr="$(printf '%s' "$resp" | jq -r '.choices[0].finish_reason // empty' 2>/dev/null)"
     [ "$rc" = 28 ] && err="timeout after 300s"
+    [ "$rc" != 0 ] && [ -z "$err" ] && err="curl failed with exit code $rc"
     emit "" "${err:-empty response (HTTP ${http:-?}, finish_reason=${fr:-?}) - no host matched routing?}" "${pt:-0}" "${ct:-0}" null unknown "$lat"; return
   fi
   if [ -n "$cost" ]; then emit "$text" "" "${pt:-0}" "${ct:-0}" "$cost" openrouter "$lat"

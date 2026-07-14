@@ -22,7 +22,8 @@ import sys
 import glob
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MANIFEST = json.load(open(os.path.join(HERE, "manifest.json")))
+with open(os.path.join(HERE, "manifest.json"), encoding="utf-8") as _mf:
+    MANIFEST = json.load(_mf)
 
 # Severity weights for the composite detection score.
 WEIGHT = {"Critical": 3.0, "High": 2.0, "Medium": 1.5, "Low": 1.0}
@@ -42,7 +43,9 @@ def cited_lines(text):
     nums = set()
     for m in re.finditer(r"(?:line[s]?\s*[:~]?\s*|:)(\d{1,4})", text, re.I):
         nums.add(int(m.group(1)))
-    for m in re.finditer(r"\b(\d{1,4})\b", text):     # fall back to bare numbers too
+    # Bare integers, but NOT digits inside a decimal like a model version ("Qwen 3.7", "GLM 5.2")
+    # or a severity weight ("1.5") — those would otherwise inject spurious "cited lines".
+    for m in re.finditer(r"(?<!\.)\b(\d{1,4})\b(?!\.\d)", text):
         n = int(m.group(1))
         if 1 <= n <= 9999:
             nums.add(n)
@@ -66,10 +69,11 @@ SEV_EMOJI = ["🔴", "🟠", "🟡"]  # Critical / High / Medium — Low exclude
 
 def false_positives(text):
     """Count concrete Critical/High/Medium findings in a review of the CLEAN fixture."""
-    if re.search(r"no (findings|issues|concerns)|looks good|nothing to flag|no bugs", text, re.I):
-        # still count explicit severity markers if present, else 0
-        pass
     emoji = sum(text.count(e) for e in SEV_EMOJI)
+    # An explicit "no findings" verdict wins: return the emoji count (0 if none), so a bullet like
+    # "- No Critical issues found" is not miscounted as a false positive by the fallback below.
+    if re.search(r"no (findings|issues|concerns)|looks good|nothing to flag|no bugs", text, re.I):
+        return emoji
     if emoji:
         return emoji
     # No emoji: count bulleted findings that name a blocking severity.
@@ -93,12 +97,19 @@ def main():
 
     per_model = {}
     for path in sorted(glob.glob(os.path.join(raw_dir, "*.json"))):
-        r = json.load(open(path))
+        try:
+            with open(path, encoding="utf-8") as fh:
+                r = json.load(fh)
+        except (json.JSONDecodeError, OSError) as e:
+            print(f"  skip malformed raw file {os.path.basename(path)}: {e}")
+            continue
         mid = r["model"]
         m = per_model.setdefault(mid, {
             "model": mid, "spec": r.get("spec", ""), "detected": [], "missed": [],
             "found_weight": 0.0, "missed_crit": 0, "false_positives": 0,
-            "cost": 0.0, "cost_estimated": False, "latency_ms": [], "errors": [],
+            # cost stays None until a real/estimated figure lands, so a genuinely free model (0.0)
+            # is distinguishable from one whose cost we never learned (None -> "n/a", sorts last).
+            "cost": None, "cost_estimated": False, "latency_ms": [], "errors": [],
             "prompt_tokens": 0, "completion_tokens": 0,
         })
         text = r.get("text") or ""
@@ -111,13 +122,13 @@ def main():
 
         # Cost: real from OpenRouter, else estimate from the price map.
         if r.get("total_cost") is not None:
-            m["cost"] += float(r["total_cost"])
+            m["cost"] = (m["cost"] or 0.0) + float(r["total_cost"])
         else:
             spec = r.get("spec", "")
             model_name = spec.split(":", 1)[1] if spec.startswith("gemini:") else spec
             price = PRICES.get(model_name)
             if price:
-                m["cost"] += pt / 1e6 * price[0] + ct / 1e6 * price[1]
+                m["cost"] = (m["cost"] or 0.0) + pt / 1e6 * price[0] + ct / 1e6 * price[1]
                 m["cost_estimated"] = True
 
         if r["fixture"] in clean_fixtures:
@@ -143,19 +154,21 @@ def main():
             "detected_count": det,
             "avg_latency_ms": int(sum(m["latency_ms"]) / len(m["latency_ms"])) if m["latency_ms"] else 0,
         })
-    rows.sort(key=lambda x: (-x["detection_pct"], x["cost"] or 9e9))
+    rows.sort(key=lambda x: (-x["detection_pct"], x["cost"] if x["cost"] is not None else 9e9))
 
     scorecard = {
         "run_id": run_id, "strict": strict, "total_bugs": len(bugs),
         "total_weight": total_weight, "n_critical": n_crit, "models": rows,
     }
-    json.dump(scorecard, open(os.path.join(run_dir, "scorecard.json"), "w"), indent=2)
+    with open(os.path.join(run_dir, "scorecard.json"), "w", encoding="utf-8") as fh:
+        json.dump(scorecard, fh, indent=2)
 
     # Per-run RESULTS.md
     lines = [f"# Benchmark run `{run_id}`", ""]
     meta_path = os.path.join(run_dir, "meta.json")
     if os.path.exists(meta_path):
-        meta = json.load(open(meta_path))
+        with open(meta_path, encoding="utf-8") as fh:
+            meta = json.load(fh)
         rt = meta.get("routing", {})
         lines.append(f"Routing: hosts=`{rt.get('openrouter_hosts') or 'any'}` "
                      f"sort=`{rt.get('sort')}` zdr=`{rt.get('zdr')}`  ·  "
@@ -171,7 +184,7 @@ def main():
         "|---|---|---|---|---|---|---|---|---|",
     ]
     for i, r in enumerate(rows, 1):
-        cost = "n/a" if (r["cost"] == 0 and not r["cost_estimated"]) else \
+        cost = "n/a" if r["cost"] is None else \
                f"{'~' if r['cost_estimated'] else ''}${r['cost']:.4f}"
         note = ""
         if r["errors"]:
@@ -182,7 +195,8 @@ def main():
             f"{r['avg_latency_ms']} ms | {cost} | {note} |")
     lines += ["", "`~` = estimated cost (direct Gemini token estimate); un-prefixed = real OpenRouter USD.",
               "", "See `scorecard.json` for the per-bug detection matrix and `raw/` for full model output."]
-    open(os.path.join(run_dir, "RESULTS.md"), "w").write("\n".join(lines) + "\n")
+    with open(os.path.join(run_dir, "RESULTS.md"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
 
     # Rolled-up index
     runs = sorted(d for d in os.listdir(os.path.join(HERE, "results"))
@@ -195,11 +209,13 @@ def main():
         sc_path = os.path.join(HERE, "results", rid, "scorecard.json")
         if not os.path.exists(sc_path):
             continue
-        sc = json.load(open(sc_path))
+        with open(sc_path, encoding="utf-8") as fh:
+            sc = json.load(fh)
         top = sc["models"][0] if sc["models"] else None
         best = f"best: **{top['model']}** ({top['detection_pct']}%)" if top else "no models"
         idx.append(f"- [`{rid}`](results/{rid}/RESULTS.md) — {len(sc['models'])} models, {best}")
-    open(os.path.join(HERE, "RESULTS.md"), "w").write("\n".join(idx) + "\n")
+    with open(os.path.join(HERE, "RESULTS.md"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(idx) + "\n")
 
     print(f"Scored {len(rows)} models -> {os.path.join(run_dir, 'RESULTS.md')}")
     for r in rows:

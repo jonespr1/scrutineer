@@ -17,9 +17,15 @@ MANIFEST="$HERE/manifest.json"
 FIXDIR="$HERE/fixtures"
 INSTRUCTIONS="$(cat "$HERE/lib/prompt_instructions.txt")"
 
-RUN_ID="${1:-$(date -u +%Y%m%dT%H%M%SZ)}"; [ "${RUN_ID#--}" != "$RUN_ID" ] && RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
-ONLY=""
-while [ $# -gt 0 ]; do case "$1" in --only) ONLY="$2"; shift 2;; *) shift;; esac; done
+RUN_ID=""; ONLY=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --only) ONLY="${2:-}"; shift; [ $# -gt 0 ] && shift ;;   # tolerate a missing value (no infinite loop)
+    --*)    shift ;;
+    *)      [ -z "$RUN_ID" ] && RUN_ID="$1"; shift ;;
+  esac
+done
+RUN_ID="${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
 
 OUT="$HERE/results/$RUN_ID"; RAW="$OUT/raw"; mkdir -p "$RAW"
 echo "Run: $RUN_ID  ->  $OUT"
@@ -72,6 +78,8 @@ while IFS= read -r m; do
     echo "   - $f"
     res="$(bash "$HERE/lib/call_model.sh" "$spec" "$pf")"
     rm -f "$pf"
+    # Never let a crashed call produce a 0-byte file that would later break the scorer.
+    [ -z "$res" ] && res='{"text":"","error":"call_model.sh produced no output","prompt_tokens":0,"completion_tokens":0,"total_cost":null,"cost_source":"unknown","latency_ms":0}'
     jq -c --arg model "$id" --arg spec "$spec" --arg fixture "$f" \
        '. + {model:$model, spec:$spec, fixture:$fixture}' <<<"$res" \
        > "$RAW/${id}__${f//\//_}.json"
