@@ -1,0 +1,1 @@
+{"text": "", "error": "Provider returned error", "prompt_tokens": 0, "completion_tokens": 0, "total_cost": null, "cost_source": "unknown", "latency_ms": 969, "model": "hy3", "spec": "tencent/hy3", "fixture": "string_utils.js", "trial": 1}
