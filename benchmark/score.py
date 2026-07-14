@@ -52,9 +52,10 @@ def cited_lines(text):
         nums.add(int(m.group(1)))
         if m.group(2):
             nums.add(int(m.group(2)))
-    # "path.py:7" / "users.ts:12" — the colon must follow a filename character, so "ratio 3:2"
-    # and "12:30" (digit before the colon) do not match.
-    for m in re.finditer(r"[A-Za-z_)\]]:(\d{1,4})\b", text):
+    # "path.py:7" / "users.ts:12" — the colon must follow a filename character (letter, _, ), ],
+    # or a closing backtick/quote as in `users.ts`:12 / "users.ts":12), so "ratio 3:2" and "12:30"
+    # (digit before the colon) still do not match.
+    for m in re.finditer(r"""[A-Za-z_)\]`'"]:(\d{1,4})\b""", text):
         n = int(m.group(1))
         if 1 <= n <= 9999:
             nums.add(n)
@@ -77,35 +78,40 @@ SEV_EMOJI = ["🔴", "🟠", "🟡"]  # Critical / High / Medium — Low exclude
 
 
 def false_positives(text):
-    """Count concrete Critical/High/Medium findings in a review of the CLEAN control fixture.
+    r"""Count concrete Critical/High/Medium findings in a review of the CLEAN control fixture.
 
-    Judged per line. A line is a finding when it STARTS (after an optional bullet) with a
-    blocking-severity emoji (🔴/🟠/🟡) or a severity label with a delimiter — allowing markdown
-    bold around the word: "- Critical:", "**Critical:**", "- **High** - missing await".
+    Judged per line. A line is a finding when — after any run of leading markdown *decoration* —
+    it starts with a blocking-severity emoji (🔴/🟠/🟡) or a severity label followed by a delimiter.
+    "Decoration" is the general class `PRE` below: bullets, blockquote `>`, bold `*`, brackets, and
+    backticks/quotes. Generalising the prefix (rather than special-casing each wrapper) means
+    "- **🔴 Critical:**", "> 🟠 High:", "- [🔴 Critical] …", "- [High] - …" and "**Critical:**"
+    all count, without another regex tweak per format.
 
-    We deliberately do NOT add a separate negation check. Natural clearances — "No findings",
-    "None found", "🟢 No issues" (🟢 isn't a blocking severity), "## 🔴 Critical Findings" (a
-    heading; '#' precedes the emoji so it isn't at line start) — do not begin with a blocking
-    severity token, so this test already excludes them. A negation check anchored to the line start
-    would be unreachable given that guard, and one that stripped the prefix first would wrongly drop
+    Markdown headings are excluded because `#` is deliberately NOT decoration, so "## 🔴 Critical
+    Findings" (a section title, not a finding) doesn't match.
+
+    We deliberately do NOT add a negation check. Natural clearances — "No findings", "None found",
+    "🟢 No issues" (🟢 isn't a blocking severity) — don't begin with a blocking-severity token, so
+    this test already excludes them. A prefix-stripping negation check would instead wrongly drop
     real findings whose description leads with a negation ("🔴 Critical: no bounds check",
-    "not validated"). So the "not" inside a finding's description is correctly still counted.
+    "not validated"), so the "not" inside a finding's description is correctly still counted.
 
     Consequences (all covered by tests):
-      - "🔴 Critical: input is not sanitized"      -> 1  (real finding; "not" is mid-description)
-      - "- **High** - missing await"               -> 1  (trailing bold before the delimiter is ok)
-      - "Overall looks good, but:\n- Critical: X"   -> 1  (polite filler can't mask the bullet)
-      - "No Critical issues found" / "None found"   -> 0  (does not start with a severity token)
-      - "- High quality code throughout"            -> 0  (no delimiter after the word)
-      - "## 🔴 Critical Findings" (heading)         -> 0  (emoji not at line start)
+      - "- **🔴 Critical:** input is not sanitized" -> 1   (bold+emoji; "not" is mid-description)
+      - "- [High] - missing await"                  -> 1   (bracketed label)
+      - "Overall looks good, but:\n- Critical: X"    -> 1   (polite filler can't mask the bullet)
+      - "No Critical issues found" / "None found"    -> 0   (does not start with a severity token)
+      - "- High quality code throughout"             -> 0   (no delimiter after the word)
+      - "## 🔴 Critical Findings" (heading)          -> 0   ('#' is not decoration)
     """
     count = 0
-    label = r"^[-*>]*\s*\**\s*(Critical|High|Medium)\b\**\s*[:\-–—]"
+    PRE = r"""[-*+>\[\s`'"]*"""   # leading markdown decoration; NOT '#', so headings are excluded
+    emoji = rf"^{PRE}(🔴|🟠|🟡)"
+    # A severity word wrapped in optional bold/bracket, then (after optional bold/bracket) a delimiter.
+    label = rf"^{PRE}(Critical|High|Medium)\b[\]*]*\s*[:\-–—]"
     for line in text.splitlines():
         s = line.strip()
-        # `\**` before the emoji mirrors the label regex, so a bolded "- **🔴 Critical:** X"
-        # counts too. A heading "## 🔴 …" still fails (# is neither a bullet nor a bold marker).
-        if re.match(r"^[-*>]*\s*\**\s*(🔴|🟠|🟡)", s) or re.match(label, s, re.I):
+        if re.match(emoji, s) or re.match(label, s, re.I):
             count += 1
     return count
 
