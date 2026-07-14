@@ -21,12 +21,12 @@
     { "id": "gemini-flash",      "name": "Gemini Flash (direct)",      "spec": "gemini:gemini-flash-latest",      "provider": "gemini",     "verify": false, "note": "Cheap direct baseline." },
     { "id": "gemini-3-flash",    "name": "Gemini 3 Flash preview",     "spec": "google/gemini-3-flash-preview",   "provider": "openrouter", "verify": false, "note": "From the OpenRouter compare link; a 'preview' model (may change/withdraw)." },
     { "id": "glm-5.2",           "name": "GLM 5.2",                    "spec": "z-ai/glm-5.2",                    "provider": "openrouter", "verify": false, "note": "Current cost-effective favourite; matched Pro on our own PR #1." },
-    { "id": "kimi-2.6",          "name": "Kimi K2.6 (reasoning)",      "spec": "moonshotai/kimi-k2.6",            "provider": "openrouter", "verify": false, "note": "Slug taken from the compare link you shared." },
-    { "id": "grok-4.5",          "name": "Grok 4.5 High",              "spec": "x-ai/grok-4.5",                   "provider": "openrouter", "verify": true,  "note": "GUESS slug — confirm exact id/variant (e.g. -high) on OpenRouter." },
-    { "id": "qwen-3.7-max",      "name": "Qwen 3.7 Max",               "spec": "qwen/qwen3.7-max",                "provider": "openrouter", "verify": true,  "note": "GUESS slug — confirm on OpenRouter." },
-    { "id": "deepseek-v4-pro",   "name": "DeepSeek v4 Pro",            "spec": "deepseek/deepseek-v4-pro",        "provider": "openrouter", "verify": true,  "note": "GUESS slug — confirm on OpenRouter." },
-    { "id": "minimax-m3",        "name": "MiniMax M3",                 "spec": "minimax/minimax-m3",              "provider": "openrouter", "verify": true,  "note": "GUESS slug — confirm on OpenRouter." },
-    { "id": "hunyuan-3",         "name": "Hy3 (Hunyuan 3?)",           "spec": "tencent/hunyuan-3",               "provider": "openrouter", "verify": true,  "note": "UNSURE what 'Hy3' is — confirm the intended model and slug." }
+    { "id": "kimi-2.6",          "name": "Kimi K2.6",                  "spec": "moonshotai/kimi-k2.6",            "provider": "openrouter", "verify": false, "note": "Confirmed on OpenRouter. Reasoning is a request param, not a separate slug." },
+    { "id": "grok-4.5",          "name": "Grok 4.5",                   "spec": "x-ai/grok-4.5",                   "provider": "openrouter", "verify": false, "note": "Confirmed (openrouter.ai/x-ai/grok-4.5). ~$2/$6 per 1M, 500k ctx; 'High' effort is a param; not in the EU yet." },
+    { "id": "qwen-3.7-max",      "name": "Qwen 3.7 Max",               "spec": "qwen/qwen3.7-max",                "provider": "openrouter", "verify": false, "note": "Confirmed on OpenRouter (Alibaba Qwen3.7 flagship)." },
+    { "id": "deepseek-v4-pro",   "name": "DeepSeek V4 Pro",            "spec": "deepseek/deepseek-v4-pro",        "provider": "openrouter", "verify": false, "note": "Confirmed (openrouter.ai/deepseek/deepseek-v4-pro). ~$0.435/$0.87 per 1M, 1M ctx." },
+    { "id": "minimax-m3",        "name": "MiniMax M3",                 "spec": "minimax/minimax-m3",              "provider": "openrouter", "verify": false, "note": "Confirmed on OpenRouter (openrouter.ai/provider/minimax)." },
+    { "id": "hy3",               "name": "Hy3 (Tencent Hunyuan 3)",    "spec": "tencent/hy3",                     "provider": "openrouter", "verify": false, "note": "Confirmed: Tencent Hunyuan 3, 295B MoE, Apache-2.0. Use tencent/hy3:free for the current free-window run." }
   ],
   "fixtures": [
     { "file": "user_search.js",     "language": "javascript", "clean": false },
