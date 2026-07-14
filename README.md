@@ -232,7 +232,9 @@ change would ship as a new major tag (`@v2`) that you opt into by bumping the `u
 To be notified of new versions, **Watch → Custom → Releases** on this repo, or read the
 [CHANGELOG](CHANGELOG.md). If you prefer to pin an exact version for reproducibility, reference a
 release tag (for example `@v1.1.0`) or a full commit SHA instead of `@v1`, and let Dependabot
-(the `github-actions` ecosystem) open update PRs when a newer version is published.
+(the `github-actions` ecosystem) open update PRs when a newer version is published. Those Dependabot
+PRs are **not** auto-reviewed (see the bot-skip rule under [Triggers and commands](#triggers-and-commands)) -
+comment `@review` on one if you want Scrutineer to look it over.
 
 ## Example review
 
