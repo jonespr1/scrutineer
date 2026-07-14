@@ -29,7 +29,8 @@ emit() { # text err prompt_tok completion_tok cost cost_source latency
 call_gemini() {
   local model="$1" req resp text http rc pt ct start end lat
   if [ -z "${GEMINI_API_KEY:-}" ]; then emit "" "GEMINI_API_KEY not set" 0 0 null unknown 0; return; fi
-  req="$(printf '%s' "$PROMPT" | jq -Rsc '{contents:[{parts:[{text:.}]}]}')"
+  # temperature 0 for reproducibility across runs (benchmark, not production).
+  req="$(printf '%s' "$PROMPT" | jq -Rsc '{contents:[{parts:[{text:.}]}], generationConfig:{temperature:0}}')"
   start="$(now_ms)"
   rc=0; resp="$(printf '%s' "$req" | curl -sS -m 240 -w '\n__HTTP__%{http_code}' \
     "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}" \
@@ -59,9 +60,16 @@ call_openrouter() {
   [ "${OPENROUTER_ZDR:-true}" != "false" ] && prov="$(printf '%s' "$prov" | jq '. + {zdr:true}')"
   # Accept "in,out" or a single value (applied to both) so a lone number can't break the jq encode.
   [ -n "${OPENROUTER_MAXPRICE:-}" ] && prov="$(printf '%s' "$prov" | jq --arg m "$OPENROUTER_MAXPRICE" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:((.[1] // .[0])|tonumber)}})')"
-  # usage.include:true asks OpenRouter to return the native USD cost inline.
+  # Exclude lossy quantisations so the comparison is model-vs-model, not model-vs-cheap-fp4-host.
+  # Unset/empty -> the fp8/fp16/bf16 default (empty is what the workflow passes for an unset var, so
+  # ":-" not "-"). Set OPENROUTER_QUANT=any to disable. If a model only serves at fp4 it then fails
+  # to route, which the run surfaces as an error rather than a silently-degraded score.
+  QUANT="${OPENROUTER_QUANT:-fp8,fp16,bf16}"
+  case "$QUANT" in any|none|all|off) QUANT="" ;; esac
+  [ -n "$QUANT" ] && prov="$(printf '%s' "$prov" | jq --arg q "$QUANT" '. + {quantizations:($q|split(",")|map(gsub("^ +| +$";"")))}')"
+  # temperature 0 for reproducibility; usage.include:true returns the native USD cost inline.
   req="$(printf '%s' "$PROMPT" | jq -Rsc --arg m "$model" --argjson prov "$prov" \
-    '{model:$m, messages:[{role:"user",content:.}], provider:$prov, usage:{include:true}}')"
+    '{model:$m, messages:[{role:"user",content:.}], provider:$prov, temperature:0, usage:{include:true}}')"
   start="$(now_ms)"
   rc=0; resp="$(printf '%s' "$req" | curl -sS -m 300 -w '\n__HTTP__%{http_code}' \
     "https://openrouter.ai/api/v1/chat/completions" \

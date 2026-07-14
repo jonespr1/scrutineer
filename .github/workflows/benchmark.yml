@@ -19,6 +19,10 @@ on:
         type: boolean
         required: false
         default: false
+      trials:
+        description: 'Samples per model x fixture (temperature is 0; >1 exposes run-to-run variance)'
+        required: false
+        default: '1'
 
 permissions:
   contents: 'write'   # to commit results back to the branch
@@ -44,13 +48,16 @@ jobs:
           OPENROUTER_SORT: '${{ vars.OPENROUTER_SORT }}'
           OPENROUTER_ZDR: '${{ vars.OPENROUTER_ZDR }}'
           OPENROUTER_MAXPRICE: '${{ vars.OPENROUTER_MAXPRICE }}'
+          OPENROUTER_QUANT: '${{ vars.OPENROUTER_QUANT }}'
           # Inputs pass through env, never interpolated into the script body (avoids shell injection).
           INPUT_ONLY: '${{ inputs.only }}'
           INPUT_STRICT: '${{ inputs.strict }}'
+          INPUT_TRIALS: '${{ inputs.trials }}'
         run: |
           set -euo pipefail
           RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
           echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          export TRIALS="${INPUT_TRIALS:-1}"
           ARGS=(); [ -n "$INPUT_ONLY" ] && ARGS=(--only "$INPUT_ONLY")
           bash benchmark/run.sh "$RUN_ID" "${ARGS[@]}"
           # Sync any run committed while this one was queued BEFORE scoring. Our raw output lives in a

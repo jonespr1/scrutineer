@@ -33,6 +33,7 @@
     { "file": "session_cache.py",   "language": "python",     "clean": false },
     { "file": "upload_handler.ts",  "language": "typescript", "clean": false },
     { "file": "config_store.go",    "language": "go",         "clean": false },
+    { "file": "device_bridge.py",   "language": "python",     "clean": false },
     { "file": "string_utils.js",    "language": "javascript", "clean": true }
   ],
   "bugs": [
@@ -95,6 +96,21 @@
       "id": "B12", "fixture": "config_store.go", "line": 25, "window": 4, "severity": "Low", "category": "resource-leak",
       "title": "Opened file never closed (missing `defer f.Close()`)",
       "patterns": ["defer .*close", "f.close", "not closed", "never closed", "resource leak", "file (descriptor|handle) leak"]
+    },
+    {
+      "id": "B13", "fixture": "device_bridge.py", "line": 34, "window": 6, "severity": "High", "category": "native-ref-gc",
+      "title": "Native event filter is GC'd: installNativeEventFilter keeps no Python reference -> dangling C++ pointer",
+      "patterns": ["garbage.?collect", "\\bgc'?d?\\b", "dangling", "no (python.?side )?reference", "keep.*(a )?reference", "not (kept|retained|referenced|held).*(alive|reference)", "installnativeeventfilter", "strong reference", "goes out of scope"]
+    },
+    {
+      "id": "B14", "fixture": "device_bridge.py", "line": 44, "window": 6, "severity": "High", "category": "com-release-ordering",
+      "title": "COM objects released after CoUninitialize(): Release() runs on a torn-down apartment -> access violation",
+      "patterns": ["couninitialize", "access violation", "outliv", "apartment", "released? (after|before)", "com object.*(alive|release|refcount)", "refcount", "torn down", "before .*uninit"]
+    },
+    {
+      "id": "B15", "fixture": "device_bridge.py", "line": 64, "window": 4, "severity": "Medium", "category": "stale-cache-not-invalidated",
+      "title": "Cache never invalidated on failure: an unplugged device is reported as present indefinitely",
+      "patterns": ["stale", "invalidat", "never (cleared|reset|invalidated)", "cache.*(stale|not clear|never|wrong)", "unplugged", "last.?known", "returns? .*(cached|stale)"]
     }
   ]
 }

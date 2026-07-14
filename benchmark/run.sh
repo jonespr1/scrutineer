@@ -26,6 +26,8 @@ while [ $# -gt 0 ]; do
   esac
 done
 RUN_ID="${RUN_ID:-$(date -u +%Y%m%dT%H%M%SZ)}"
+TRIALS="${TRIALS:-1}"   # samples per model x fixture; >1 exposes run-to-run variance (temp is 0)
+case "$TRIALS" in ''|*[!0-9]*) TRIALS=1 ;; esac; [ "$TRIALS" -lt 1 ] && TRIALS=1
 
 OUT="$HERE/results/$RUN_ID"; RAW="$OUT/raw"; mkdir -p "$RAW"
 echo "Run: $RUN_ID  ->  $OUT"
@@ -55,8 +57,10 @@ build_prompt() { # fixture_file -> prompt on stdout
 jq -n --arg id "$RUN_ID" \
       --arg hosts "${OPENROUTER_HOSTS:-}" --arg sort "${OPENROUTER_SORT:-price}" \
       --arg zdr "${OPENROUTER_ZDR:-true}" --arg maxp "${OPENROUTER_MAXPRICE:-}" \
+      --arg quant "${OPENROUTER_QUANT:-fp8,fp16,bf16}" --argjson trials "$TRIALS" \
       --argjson resolved "$( [ -n "$AVAILABLE" ] && echo true || echo false )" \
-      '{run_id:$id, started_at:$id, routing:{openrouter_hosts:$hosts, sort:$sort, zdr:$zdr, max_price:$maxp},
+      '{run_id:$id, started_at:$id, trials:$trials,
+        routing:{openrouter_hosts:$hosts, sort:$sort, zdr:$zdr, max_price:$maxp, quantizations:$quant},
         slugs_validated:$resolved}' > "$OUT/meta.json"
 
 MODELS_JSON="$(jq -c '.models[]' "$MANIFEST")"
@@ -74,15 +78,17 @@ while IFS= read -r m; do
   echo "== Model: $id ($spec) =="
   while IFS= read -r f; do
     [ -z "$f" ] && continue
-    pf="$(mktemp)"; build_prompt "$f" > "$pf"
-    echo "   - $f"
-    res="$(bash "$HERE/lib/call_model.sh" "$spec" "$pf")"
+    pf="$(mktemp)"; build_prompt "$f" > "$pf"   # same prompt across trials (temperature is 0)
+    for trial in $(seq 1 "$TRIALS"); do
+      echo "   - $f (trial $trial/$TRIALS)"
+      res="$(bash "$HERE/lib/call_model.sh" "$spec" "$pf")"
+      # Never let a crashed call produce a 0-byte file that would later break the scorer.
+      [ -z "$res" ] && res='{"text":"","error":"call_model.sh produced no output","prompt_tokens":0,"completion_tokens":0,"total_cost":null,"cost_source":"unknown","latency_ms":0}'
+      jq -c --arg model "$id" --arg spec "$spec" --arg fixture "$f" --argjson trial "$trial" \
+         '. + {model:$model, spec:$spec, fixture:$fixture, trial:$trial}' <<<"$res" \
+         > "$RAW/${id}__${f//\//_}__t${trial}.json"
+    done
     rm -f "$pf"
-    # Never let a crashed call produce a 0-byte file that would later break the scorer.
-    [ -z "$res" ] && res='{"text":"","error":"call_model.sh produced no output","prompt_tokens":0,"completion_tokens":0,"total_cost":null,"cost_source":"unknown","latency_ms":0}'
-    jq -c --arg model "$id" --arg spec "$spec" --arg fixture "$f" \
-       '. + {model:$model, spec:$spec, fixture:$fixture}' <<<"$res" \
-       > "$RAW/${id}__${f//\//_}.json"
   done <<<"$FIXTURES"
 done <<<"$MODELS_JSON"
 
