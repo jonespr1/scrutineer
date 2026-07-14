@@ -33,6 +33,8 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: 'actions/checkout@v4'
+        with:
+          fetch-depth: 0   # full history so the pre-score `git pull --rebase` has a merge-base
 
       - name: 'Run benchmark'
         env:
@@ -51,6 +53,13 @@ jobs:
           echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
           ARGS=(); [ -n "$INPUT_ONLY" ] && ARGS=(--only "$INPUT_ONLY")
           bash benchmark/run.sh "$RUN_ID" "${ARGS[@]}"
+          # Sync any run committed while this one was queued BEFORE scoring. Our raw output lives in a
+          # unique results/<RUN_ID>/ dir (no conflict) and RESULTS.md isn't regenerated until score.py
+          # runs next — so this fast-forwards cleanly and score.py then rebuilds one unified index over
+          # every run's folder, instead of two runs colliding on the same RESULTS.md line at commit.
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin "$GITHUB_REF_NAME" || true
           SCORE_ARGS=(); [ "$INPUT_STRICT" = "true" ] && SCORE_ARGS=(--strict)
           python3 benchmark/score.py "$RUN_ID" "${SCORE_ARGS[@]}"
 

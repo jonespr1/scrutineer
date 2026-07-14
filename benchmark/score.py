@@ -39,16 +39,25 @@ PRICES = {
 
 
 def cited_lines(text):
-    """All integers that look like line references in the review text."""
+    """Integers explicitly cited as line references — NOT stray numbers like "11 findings".
+
+    Recognised forms: "line 7", "lines 7-9", "line: 7", "line ~7", "L7", "#7", "path.py:7", "(7)".
+    A bare integer with no line marker is deliberately not treated as a citation, so counts like
+    "11 issues" or "500 tokens" can't fabricate a line hit. (In non-strict scoring the filename
+    match still backstops detection; this keeps --strict honest.)
+    """
     nums = set()
-    for m in re.finditer(r"(?:line[s]?\s*[:~]?\s*|:)(\d{1,4})", text, re.I):
+    # "line 7" / "lines 7" / "line: 7" / "line ~7", including a range "lines 7-9".
+    for m in re.finditer(r"lines?\s*[:~]?\s*(\d{1,4})(?:\s*[-–—]\s*(\d{1,4}))?", text, re.I):
         nums.add(int(m.group(1)))
-    # Bare integers, but NOT digits inside a decimal like a model version ("Qwen 3.7", "GLM 5.2")
-    # or a severity weight ("1.5") — those would otherwise inject spurious "cited lines".
-    for m in re.finditer(r"(?<!\.)\b(\d{1,4})\b(?!\.\d)", text):
-        n = int(m.group(1))
-        if 1 <= n <= 9999:
-            nums.add(n)
+        if m.group(2):
+            nums.add(int(m.group(2)))
+    # Other explicit location markers only: "L7", "#7", "path:7", "(7)".
+    for pat in (r"\bL(\d{1,4})\b", r"#(\d{1,4})\b", r":(\d{1,4})\b", r"\((\d{1,4})\)"):
+        for m in re.finditer(pat, text):
+            n = int(m.group(1))
+            if 1 <= n <= 9999:
+                nums.add(n)
     return nums
 
 

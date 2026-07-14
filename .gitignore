@@ -4,6 +4,10 @@
 # GitHub App credentials, if you ever use them
 gha-creds-*.json
 
+# Python bytecode (e.g. from running benchmark/score.py locally)
+__pycache__/
+*.pyc
+
 # OS / editor cruft
 .DS_Store
 Thumbs.db
