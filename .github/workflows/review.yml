@@ -10,7 +10,9 @@
 #                     gemini:<model>        -> Google Gemini API direct, specific model
 #                     <openrouter-model-id> -> via OpenRouter, e.g. z-ai/glm-5.2 or
 #                                              google/gemini-2.5-flash
-#                   Default: "gemini". Two slots = two independent reviews (a second opinion).
+#                   Default: "gemini, z-ai/glm-5.2" (Gemini Flash + GLM). Two slots = two
+#                   independent reviews (a second opinion). A repo overrides this per its needs
+#                   (e.g. REVIEWERS = gemini for a Gemini-only repo with no OpenRouter key).
 #                   Examples:
 #                     REVIEWERS = gemini
 #                     REVIEWERS = gemini, z-ai/glm-5.2
@@ -292,9 +294,16 @@ jobs:
           run_slot() {
             local spec="$1" model label text
             case "$spec" in
-              gemini)   model="${GEMINI_MODEL:-gemini-pro-latest}"; label="$model" ;;
+              gemini)   model="${GEMINI_MODEL:-gemini-flash-latest}"; label="$model" ;;
               gemini:*) model="${spec#gemini:}"; label="$model" ;;
               *)        model="$spec"; label="$spec (via OpenRouter)" ;;
+            esac
+            # Skip a slot whose key is not configured - silently (log only, no PR comment). This lets
+            # the GLM+Flash default degrade cleanly on a repo that has only one of the two keys,
+            # instead of posting a noisy "KEY is not set" comment on every review.
+            case "$spec" in
+              gemini|gemini:*) [ -z "${GEMINI_API_KEY:-}" ]     && { echo "Skip '$label': GEMINI_API_KEY not set."; return 0; } ;;
+              *)               [ -z "${OPENROUTER_API_KEY:-}" ] && { echo "Skip '$label': OPENROUTER_API_KEY not set."; return 0; } ;;
             esac
             if already_reviewed "$label"; then
               echo "Skip: '$label' already reviewed ${SHORT_SHA:-?} with no new activity."
@@ -316,7 +325,7 @@ jobs:
           FILTER="$(printf '%s' "${COMMENT_BODY:-}" | grep -ioE '@review[[:space:]]+[[:alnum:]:_./-]+' | head -1 | sed -E 's/^@review[[:space:]]+//I' | tr '[:upper:]' '[:lower:]' || true)"
           case "$FILTER" in all|both|everyone) FILTER="" ;; esac
 
-          IFS=',' read -ra SLOTS <<< "${REVIEWERS:-gemini}"
+          IFS=',' read -ra SLOTS <<< "${REVIEWERS:-gemini, z-ai/glm-5.2}"
           SELECTED=()
           for spec in "${SLOTS[@]}"; do
             spec="${spec//[[:space:]]/}"; [ -z "$spec" ] && continue
