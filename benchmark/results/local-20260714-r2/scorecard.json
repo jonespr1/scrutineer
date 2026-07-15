@@ -1,0 +1,2413 @@
+{
+  "run_id": "local-20260714-r2",
+  "strict": false,
+  "trials": 1,
+  "total_bugs": 18,
+  "total_weight": 36.0,
+  "n_critical": 3,
+  "models": [
+    {
+      "model": "gemini-flash",
+      "spec": "gemini:gemini-flash-latest",
+      "ntrials": 1,
+      "detection_pct": 100.0,
+      "detected_maj": 18,
+      "missed_crit": 0,
+      "flaky": 0,
+      "false_positives": 0.0,
+      "avg_latency_ms": 11049,
+      "cost": 0.01824,
+      "cost_estimated": true,
+      "prompt_tokens": 13357,
+      "completion_tokens": 5693,
+      "errors": [],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 1.0,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 1.0,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    },
+    {
+      "model": "minimax-m3",
+      "spec": "minimax/minimax-m3",
+      "ntrials": 1,
+      "detection_pct": 100.0,
+      "detected_maj": 18,
+      "missed_crit": 0,
+      "flaky": 0,
+      "false_positives": 0.0,
+      "avg_latency_ms": 53616,
+      "cost": 0.048442,
+      "cost_estimated": false,
+      "prompt_tokens": 13530,
+      "completion_tokens": 37345,
+      "errors": [],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 1.0,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 1.0,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    },
+    {
+      "model": "kimi-2.6",
+      "spec": "moonshotai/kimi-k2.6",
+      "ntrials": 1,
+      "detection_pct": 100.0,
+      "detected_maj": 18,
+      "missed_crit": 0,
+      "flaky": 0,
+      "false_positives": 0.0,
+      "avg_latency_ms": 157370,
+      "cost": 0.218862,
+      "cost_estimated": false,
+      "prompt_tokens": 11937,
+      "completion_tokens": 62073,
+      "errors": [],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 1.0,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 1.0,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    },
+    {
+      "model": "gemini-3-flash",
+      "spec": "google/gemini-3-flash-preview",
+      "ntrials": 1,
+      "detection_pct": 95.8,
+      "detected_maj": 17,
+      "missed_crit": 0,
+      "flaky": 0,
+      "false_positives": 0.0,
+      "avg_latency_ms": 3922,
+      "cost": 0.020741,
+      "cost_estimated": false,
+      "prompt_tokens": 13348,
+      "completion_tokens": 4689,
+      "errors": [],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 0.0,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 1.0,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    },
+    {
+      "model": "deepseek-v4-pro",
+      "spec": "deepseek/deepseek-v4-pro",
+      "ntrials": 1,
+      "detection_pct": 95.8,
+      "detected_maj": 17,
+      "missed_crit": 0,
+      "flaky": 0,
+      "false_positives": 0.0,
+      "avg_latency_ms": 54158,
+      "cost": 0.037703,
+      "cost_estimated": false,
+      "prompt_tokens": 12394,
+      "completion_tokens": 20932,
+      "errors": [],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 0.0,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 1.0,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    },
+    {
+      "model": "gemini-pro",
+      "spec": "gemini:gemini-pro-latest",
+      "ntrials": 1,
+      "detection_pct": 95.8,
+      "detected_maj": 17,
+      "missed_crit": 0,
+      "flaky": 0,
+      "false_positives": 0.0,
+      "avg_latency_ms": 40267,
+      "cost": 0.060226,
+      "cost_estimated": true,
+      "prompt_tokens": 13357,
+      "completion_tokens": 4353,
+      "errors": [],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 0.0,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 1.0,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    },
+    {
+      "model": "qwen-3.7-max",
+      "spec": "qwen/qwen3.7-max",
+      "ntrials": 1,
+      "detection_pct": 95.8,
+      "detected_maj": 17,
+      "missed_crit": 0,
+      "flaky": 0,
+      "false_positives": 0.0,
+      "avg_latency_ms": 60753,
+      "cost": 0.1261,
+      "cost_estimated": false,
+      "prompt_tokens": 12905,
+      "completion_tokens": 29325,
+      "errors": [],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 1.0,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 0.0,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    },
+    {
+      "model": "grok-4.5",
+      "spec": "x-ai/grok-4.5",
+      "ntrials": 1,
+      "detection_pct": 95.8,
+      "detected_maj": 17,
+      "missed_crit": 0,
+      "flaky": 0,
+      "false_positives": 0.0,
+      "avg_latency_ms": 63256,
+      "cost": 0.368852,
+      "cost_estimated": false,
+      "prompt_tokens": 14470,
+      "completion_tokens": 56940,
+      "errors": [],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 1.0,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 0.0,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    },
+    {
+      "model": "glm-5.2",
+      "spec": "z-ai/glm-5.2",
+      "ntrials": 1,
+      "detection_pct": 94.4,
+      "detected_maj": 17,
+      "missed_crit": 0,
+      "flaky": 0,
+      "false_positives": 0.0,
+      "avg_latency_ms": 32459,
+      "cost": 0.036701,
+      "cost_estimated": false,
+      "prompt_tokens": 10324,
+      "completion_tokens": 9919,
+      "errors": [
+        "hard_app_sidebar.tsx t1: call hung (no response; connection wedged) - excluded, not a genuine miss"
+      ],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 1.0,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 1.0,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 0.0,
+        "B18": 1.0
+      }
+    },
+    {
+      "model": "hy3",
+      "spec": "tencent/hy3",
+      "ntrials": 1,
+      "detection_pct": 65.3,
+      "detected_maj": 11,
+      "missed_crit": 0,
+      "flaky": 0,
+      "false_positives": 0.0,
+      "avg_latency_ms": 10147,
+      "cost": 0.002774,
+      "cost_estimated": false,
+      "prompt_tokens": 7922,
+      "completion_tokens": 2473,
+      "errors": [
+        "config_store.go t1: Provider returned error",
+        "hard_rate_limit.ts t1: Provider returned error",
+        "session_cache.py t1: Provider returned error"
+      ],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 0.0,
+        "B5": 0.0,
+        "B6": 0.0,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 1.0,
+        "B10": 0.0,
+        "B11": 0.0,
+        "B12": 0.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 0.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    }
+  ],
+  "combinations": [
+    {
+      "members": [
+        "gemini-flash"
+      ],
+      "size": 1,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.01824,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "hy3"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.021014,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-flash"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.038981,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "hy3"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.039475,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-flash",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.041755,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "minimax-m3"
+      ],
+      "size": 1,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.048442,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "hy3",
+        "minimax-m3"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.051216,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "glm-5.2"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.054941,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-flash"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.055943,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "glm-5.2"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.057442,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "glm-5.2",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.057715,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-flash",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.058717,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "glm-5.2",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.060216,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "minimax-m3"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.066682,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "minimax-m3"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.069183,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "hy3",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.069456,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "hy3",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.071957,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "glm-5.2"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.074404,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-flash",
+        "glm-5.2"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.075682,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-3-flash",
+        "gemini-flash"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.076684,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "glm-5.2",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.077178,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "gemini-pro"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.078466,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "gemini-pro",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.08124,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "minimax-m3"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.085143,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "minimax-m3"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.086145,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-flash",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.087423,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "hy3",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.087917,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "hy3",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.088919,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-flash",
+        "glm-5.2"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.092644,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-3-flash",
+        "glm-5.2"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.095145,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "glm-5.2"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.096927,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-flash",
+        "gemini-pro"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.099207,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "glm-5.2",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.099701,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "glm-5.2",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.103383,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-flash",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.104385,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "glm-5.2",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.105884,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-3-flash",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.106886,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "minimax-m3"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.108668,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "hy3",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.111442,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "gemini-pro",
+        "glm-5.2"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.115167,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-flash",
+        "gemini-pro"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.116169,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-pro",
+        "glm-5.2"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.117668,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "glm-5.2",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.122846,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "gemini-pro",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.126908,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "hy3",
+        "qwen-3.7-max"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.128874,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-pro",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.129409,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-pro",
+        "glm-5.2"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.13463,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "qwen-3.7-max"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.14434,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "glm-5.2",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.145369,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-pro",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.146371,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "qwen-3.7-max"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.146841,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "hy3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.147114,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "hy3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.149615,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "qwen-3.7-max"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.162801,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "qwen-3.7-max"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.163803,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-flash",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.165081,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "hy3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.165575,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "hy3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.166577,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "minimax-m3",
+        "qwen-3.7-max"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.174542,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "hy3",
+        "minimax-m3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.177316,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "glm-5.2",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.181041,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-flash",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.182043,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "glm-5.2",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.183542,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-3-flash",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.184544,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "qwen-3.7-max"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.186326,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "hy3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.1891,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "minimax-m3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.192782,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "minimax-m3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.195283,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "glm-5.2",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.200504,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "gemini-pro",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.204566,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-pro",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.207067,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "minimax-m3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.211243,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "minimax-m3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.212245,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "kimi-2.6"
+      ],
+      "size": 1,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.218862,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "hy3",
+        "kimi-2.6"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.221636,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "glm-5.2",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.223027,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-pro",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.224029,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "minimax-m3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.234768,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "kimi-2.6"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.237102,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "kimi-2.6"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.239603,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "hy3",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.239876,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "hy3",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.242377,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "kimi-2.6"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.255563,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "kimi-2.6"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.256565,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-flash",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.257843,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "hy3",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.258337,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "hy3",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.259339,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "kimi-2.6",
+        "minimax-m3"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.267304,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "hy3",
+        "kimi-2.6",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.270078,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "glm-5.2",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.273803,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-flash",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.274805,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "glm-5.2",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.276304,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-3-flash",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.277306,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "kimi-2.6"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.279088,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "hy3",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.281862,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "kimi-2.6",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.285544,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "kimi-2.6",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.288045,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "glm-5.2",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.293266,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "gemini-pro",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.297328,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-pro",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.299829,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "kimi-2.6",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.304005,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "kimi-2.6",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.305007,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "glm-5.2",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.315789,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-pro",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.316791,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "kimi-2.6",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.32753,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "kimi-2.6",
+        "qwen-3.7-max"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.344962,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "hy3",
+        "kimi-2.6",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.347736,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "kimi-2.6",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.363202,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "kimi-2.6",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.365703,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "grok-4.5",
+        "hy3"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.371626,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "kimi-2.6",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.381663,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "kimi-2.6",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.382665,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "grok-4.5"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.387092,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "grok-4.5"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.389593,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "grok-4.5",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.389866,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "grok-4.5",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.392367,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "kimi-2.6",
+        "minimax-m3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.393404,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "kimi-2.6",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.405188,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "grok-4.5"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.405553,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "grok-4.5"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.406555,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-flash",
+        "grok-4.5"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.407833,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "grok-4.5",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.408327,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "grok-4.5",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.409329,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "grok-4.5",
+        "minimax-m3"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.417294,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "grok-4.5",
+        "hy3",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.420068,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "glm-5.2",
+        "grok-4.5"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.423793,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-flash",
+        "grok-4.5"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.424795,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "glm-5.2",
+        "grok-4.5"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.426294,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-3-flash",
+        "grok-4.5"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.427296,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "grok-4.5"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.429078,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "grok-4.5",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.431852,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "grok-4.5",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.435534,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "grok-4.5",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.438035,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "glm-5.2",
+        "grok-4.5"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.443256,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "gemini-pro",
+        "grok-4.5"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.447318,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-pro",
+        "grok-4.5"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.449819,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "grok-4.5",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.453995,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "grok-4.5",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.454997,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "glm-5.2",
+        "grok-4.5"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.465779,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-pro",
+        "grok-4.5"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.466781,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "grok-4.5",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.47752,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "grok-4.5",
+        "hy3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.497726,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "grok-4.5",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.513192,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "grok-4.5",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.515693,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "grok-4.5",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.531653,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "grok-4.5",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.532655,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "grok-4.5",
+        "minimax-m3",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.543394,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "grok-4.5",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.555178,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "grok-4.5",
+        "kimi-2.6"
+      ],
+      "size": 2,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.587714,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "grok-4.5",
+        "hy3",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.590488,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash",
+        "grok-4.5",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.605954,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "grok-4.5",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.608455,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2",
+        "grok-4.5",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.624415,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "grok-4.5",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.625417,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "grok-4.5",
+        "kimi-2.6",
+        "minimax-m3"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.636156,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "grok-4.5",
+        "kimi-2.6"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.64794,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "grok-4.5",
+        "kimi-2.6",
+        "qwen-3.7-max"
+      ],
+      "size": 3,
+      "union_pct": 100.0,
+      "missed_crit": 0,
+      "cost": 0.713814,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash"
+      ],
+      "size": 1,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.020741,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "hy3"
+      ],
+      "size": 2,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.023515,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro"
+      ],
+      "size": 1,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.037703,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "hy3"
+      ],
+      "size": 2,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.040477,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-3-flash"
+      ],
+      "size": 2,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.058444,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro"
+      ],
+      "size": 1,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.060226,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-3-flash",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.061218,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-pro",
+        "hy3"
+      ],
+      "size": 2,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.063,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-pro"
+      ],
+      "size": 2,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.080967,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3-flash",
+        "gemini-pro",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.083741,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-pro"
+      ],
+      "size": 2,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.097929,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-pro",
+        "hy3"
+      ],
+      "size": 3,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.100703,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "deepseek-v4-pro",
+        "gemini-3-flash",
+        "gemini-pro"
+      ],
+      "size": 3,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.11867,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "qwen-3.7-max"
+      ],
+      "size": 1,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.1261,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "grok-4.5"
+      ],
+      "size": 1,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.368852,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "grok-4.5",
+        "qwen-3.7-max"
+      ],
+      "size": 2,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.494952,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "glm-5.2"
+      ],
+      "size": 1,
+      "union_pct": 94.4,
+      "missed_crit": 0,
+      "cost": 0.036701,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "hy3"
+      ],
+      "size": 1,
+      "union_pct": 65.3,
+      "missed_crit": 0,
+      "cost": 0.002774,
+      "false_positives": 0.0
+    }
+  ]
+}

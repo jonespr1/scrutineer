@@ -1,0 +1,1 @@
+{"model":"glm-5.2","spec":"z-ai/glm-5.2","fixture":"hard_app_sidebar.tsx","trial":1,"text":"","error":"call hung (no response; connection wedged) - excluded, not a genuine miss","prompt_tokens":0,"completion_tokens":0,"total_cost":null,"cost_source":"unknown","latency_ms":0}
