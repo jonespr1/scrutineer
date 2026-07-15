@@ -80,13 +80,27 @@ def parse_findings(body):
     return findings
 
 
+_STOP = {"line", "lines", "file", "page", "search", "code", "when", "then", "only", "does",
+         "isn", "its", "each", "every", "before", "after", "which", "would", "could", "should",
+         "will", "still", "with", "that", "this", "from", "into", "onto", "null", "your", "user"}
+
+
+def _toks(s):
+    """Meaningful lowercase word tokens (>=4 chars, minus common filler)."""
+    return {w for w in re.findall(r"[a-z][a-z0-9]{3,}", (s or "").lower()) if w not in _STOP}
+
+
 def matched(a, b):
-    """Same finding locus? Same file basename and lines within 8 (or one line missing)."""
-    if a["file"] and b["file"] and a["file"] == b["file"]:
-        if a["line"] is None or b["line"] is None:
-            return True
-        return abs(a["line"] - b["line"]) <= 8
-    return False
+    """Same finding? Requires the same file, then EITHER lines within 15 AND >=1 shared title
+    keyword, OR (when a line is missing on one side) >=2 shared title keywords. The keyword guard
+    stops two distinct findings that merely sit near each other in a dense file from merging, while
+    the wider window lets the same finding match when the two models cite slightly different lines."""
+    if not (a["file"] and b["file"] and a["file"] == b["file"]):
+        return False
+    shared = len(_toks(a["title"]) & _toks(b["title"]))
+    if a["line"] is not None and b["line"] is not None:
+        return abs(a["line"] - b["line"]) <= 15 and shared >= 1
+    return shared >= 2
 
 
 def report_pr(repo, pr):
