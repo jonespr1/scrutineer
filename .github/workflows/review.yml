@@ -10,7 +10,9 @@
 #                     gemini:<model>        -> Google Gemini API direct, specific model
 #                     <openrouter-model-id> -> via OpenRouter, e.g. z-ai/glm-5.2 or
 #                                              google/gemini-2.5-flash
-#                   Default: "gemini". Two slots = two independent reviews (a second opinion).
+#                   Default: "gemini, z-ai/glm-5.2" (Gemini Flash + GLM). Two slots = two
+#                   independent reviews (a second opinion). A repo overrides this per its needs
+#                   (e.g. REVIEWERS = gemini for a Gemini-only repo with no OpenRouter key).
 #                   Examples:
 #                     REVIEWERS = gemini
 #                     REVIEWERS = gemini, z-ai/glm-5.2
@@ -292,7 +294,7 @@ jobs:
           run_slot() {
             local spec="$1" model label text
             case "$spec" in
-              gemini)   model="${GEMINI_MODEL:-gemini-pro-latest}"; label="$model" ;;
+              gemini)   model="${GEMINI_MODEL:-gemini-flash-latest}"; label="$model" ;;
               gemini:*) model="${spec#gemini:}"; label="$model" ;;
               *)        model="$spec"; label="$spec (via OpenRouter)" ;;
             esac
@@ -316,7 +318,7 @@ jobs:
           FILTER="$(printf '%s' "${COMMENT_BODY:-}" | grep -ioE '@review[[:space:]]+[[:alnum:]:_./-]+' | head -1 | sed -E 's/^@review[[:space:]]+//I' | tr '[:upper:]' '[:lower:]' || true)"
           case "$FILTER" in all|both|everyone) FILTER="" ;; esac
 
-          IFS=',' read -ra SLOTS <<< "${REVIEWERS:-gemini}"
+          IFS=',' read -ra SLOTS <<< "${REVIEWERS:-gemini, z-ai/glm-5.2}"
           SELECTED=()
           for spec in "${SLOTS[@]}"; do
             spec="${spec//[[:space:]]/}"; [ -z "$spec" ] && continue
