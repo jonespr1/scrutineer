@@ -298,6 +298,13 @@ jobs:
               gemini:*) model="${spec#gemini:}"; label="$model" ;;
               *)        model="$spec"; label="$spec (via OpenRouter)" ;;
             esac
+            # Skip a slot whose key is not configured - silently (log only, no PR comment). This lets
+            # the GLM+Flash default degrade cleanly on a repo that has only one of the two keys,
+            # instead of posting a noisy "KEY is not set" comment on every review.
+            case "$spec" in
+              gemini|gemini:*) [ -z "${GEMINI_API_KEY:-}" ]     && { echo "Skip '$label': GEMINI_API_KEY not set."; return 0; } ;;
+              *)               [ -z "${OPENROUTER_API_KEY:-}" ] && { echo "Skip '$label': OPENROUTER_API_KEY not set."; return 0; } ;;
+            esac
             if already_reviewed "$label"; then
               echo "Skip: '$label' already reviewed ${SHORT_SHA:-?} with no new activity."
               return 0
