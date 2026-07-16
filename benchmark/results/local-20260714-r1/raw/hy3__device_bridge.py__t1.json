@@ -1,0 +1,1 @@
+{"text": "", "error": "The operation was aborted", "prompt_tokens": 0, "completion_tokens": 0, "total_cost": null, "cost_source": "unknown", "latency_ms": 12420, "model": "hy3", "spec": "tencent/hy3", "fixture": "device_bridge.py", "trial": 1}

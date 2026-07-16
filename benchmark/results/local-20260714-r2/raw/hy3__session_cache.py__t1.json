@@ -1,0 +1,1 @@
+{"text": "", "error": "Provider returned error", "prompt_tokens": 0, "completion_tokens": 0, "total_cost": null, "cost_source": "unknown", "latency_ms": 2957, "model": "hy3", "spec": "tencent/hy3", "fixture": "session_cache.py", "trial": 1}

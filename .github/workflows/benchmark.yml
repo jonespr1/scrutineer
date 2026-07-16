@@ -1,0 +1,102 @@
+# Scrutineer model benchmark.
+#
+# Runs every model in benchmark/manifest.json against the planted-bug fixtures, scores detection /
+# false positives / cost / latency, and commits standardised results under benchmark/results/.
+#
+# Trigger manually: Actions > "Scrutineer benchmark" > Run workflow.
+# Needs the same secrets as Scrutineer itself: OPENROUTER_API_KEY and/or GEMINI_API_KEY.
+name: 'Scrutineer benchmark'
+
+on:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma-separated model ids to run (blank = all in manifest.json)'
+        required: false
+        default: ''
+      strict:
+        description: 'Strict scoring (require a line-number match, not just the filename)'
+        type: boolean
+        required: false
+        default: false
+      trials:
+        description: 'Samples per model x fixture (temperature is 0; >1 exposes run-to-run variance)'
+        required: false
+        default: '1'
+
+permissions:
+  contents: 'write'   # to commit results back to the branch
+
+concurrency:
+  group: 'scrutineer-benchmark'
+  cancel-in-progress: false
+
+jobs:
+  benchmark:
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 30
+    steps:
+      - uses: 'actions/checkout@v4'
+        with:
+          fetch-depth: 0   # full history so the pre-score `git pull --rebase` has a merge-base
+
+      - name: 'Run benchmark'
+        env:
+          OPENROUTER_API_KEY: '${{ secrets.OPENROUTER_API_KEY }}'
+          GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
+          OPENROUTER_HOSTS: '${{ vars.OPENROUTER_HOSTS }}'
+          OPENROUTER_SORT: '${{ vars.OPENROUTER_SORT }}'
+          OPENROUTER_ZDR: '${{ vars.OPENROUTER_ZDR }}'
+          OPENROUTER_MAXPRICE: '${{ vars.OPENROUTER_MAXPRICE }}'
+          OPENROUTER_QUANT: '${{ vars.OPENROUTER_QUANT }}'
+          # Inputs pass through env, never interpolated into the script body (avoids shell injection).
+          INPUT_ONLY: '${{ inputs.only }}'
+          INPUT_STRICT: '${{ inputs.strict }}'
+          INPUT_TRIALS: '${{ inputs.trials }}'
+        run: |
+          set -euo pipefail
+          RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
+          echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          export TRIALS="${INPUT_TRIALS:-1}"
+          ARGS=(); [ -n "$INPUT_ONLY" ] && ARGS=(--only "$INPUT_ONLY")
+          bash benchmark/run.sh "$RUN_ID" "${ARGS[@]}"
+          # Sync any run committed while this one was queued BEFORE scoring. Our raw output lives in a
+          # unique results/<RUN_ID>/ dir (no conflict) and RESULTS.md isn't regenerated until score.py
+          # runs next — so this fast-forwards cleanly and score.py then rebuilds one unified index over
+          # every run's folder, instead of two runs colliding on the same RESULTS.md line at commit.
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git pull --rebase origin "$GITHUB_REF_NAME" || true
+          SCORE_ARGS=(); [ "$INPUT_STRICT" = "true" ] && SCORE_ARGS=(--strict)
+          python3 benchmark/score.py "$RUN_ID" "${SCORE_ARGS[@]}"
+
+      - name: 'Show results'
+        run: cat "benchmark/results/${RUN_ID}/RESULTS.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 'Commit results'
+        run: |
+          set -euo pipefail
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add benchmark/results benchmark/RESULTS.md
+          if git diff --cached --quiet; then
+            echo "No result changes to commit."
+          else
+            git commit -m "benchmark: results for run ${RUN_ID}"
+            # A concurrent run may have pushed between our pre-score sync and now. Rebase; if that
+            # conflicts, abort cleanly and skip the push rather than leaving a half-rebased tree and
+            # a failing push — the results are safe in the uploaded artifact (if: always()).
+            if git pull --rebase origin "$GITHUB_REF_NAME"; then
+              git push
+            else
+              git rebase --abort || true
+              echo "Concurrent-run race on RESULTS.md; skipped push (results are in the artifact)."
+            fi
+          fi
+
+      - name: 'Upload results artifact'
+        if: always()   # preserve paid API results for download even if the commit/push step failed
+        uses: 'actions/upload-artifact@v4'
+        with:
+          name: 'benchmark-${{ env.RUN_ID }}'
+          path: 'benchmark/results/${{ env.RUN_ID }}'

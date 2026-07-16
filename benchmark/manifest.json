@@ -1,0 +1,134 @@
+{
+  "$comment": [
+    "Ground truth for the Scrutineer benchmark. `bugs` are deliberately planted defects with a",
+    "line anchor and detection signatures; the scorer marks a bug DETECTED when a model's review",
+    "matches >=1 of its `patterns` (case-insensitive regex) AND cites a line within +/- window of",
+    "`line` (or names the fixture file). `string_utils.js` is the CLEAN control: any Critical/High/",
+    "Medium finding against it counts as a false positive. Raw model output is always stored so a",
+    "human can adjudicate.",
+    "",
+    "Slugs marked \"verify\": true are best-guess OpenRouter ids that could not be confirmed offline.",
+    "The benchmark workflow resolves every slug against https://openrouter.ai/api/v1/models before",
+    "running and skips (with a warning) any that do not exist, printing near-matches to correct."
+  ],
+  "scoring": {
+    "line_window": 4,
+    "false_positive_severities": ["Critical", "High", "Medium"],
+    "match": "pattern AND (line-in-window OR filename-mentioned)"
+  },
+  "models": [
+    { "id": "gemini-pro",        "name": "Gemini Pro (direct)",        "spec": "gemini:gemini-pro-latest",        "provider": "gemini",     "verify": false, "note": "Current production default; the £30 baseline. Cost estimated from token usage." },
+    { "id": "gemini-flash",      "name": "Gemini Flash (direct)",      "spec": "gemini:gemini-flash-latest",      "provider": "gemini",     "verify": false, "note": "Cheap direct baseline." },
+    { "id": "gemini-3-flash",    "name": "Gemini 3 Flash preview",     "spec": "google/gemini-3-flash-preview",   "provider": "openrouter", "verify": false, "note": "From the OpenRouter compare link; a 'preview' model (may change/withdraw)." },
+    { "id": "glm-5.2",           "name": "GLM 5.2",                    "spec": "z-ai/glm-5.2",                    "provider": "openrouter", "verify": false, "note": "Current cost-effective favourite; matched Pro on our own PR #1." },
+    { "id": "kimi-2.6",          "name": "Kimi K2.6",                  "spec": "moonshotai/kimi-k2.6",            "provider": "openrouter", "verify": false, "note": "Confirmed on OpenRouter. Reasoning is a request param, not a separate slug." },
+    { "id": "grok-4.5",          "name": "Grok 4.5",                   "spec": "x-ai/grok-4.5",                   "provider": "openrouter", "verify": false, "note": "Confirmed (openrouter.ai/x-ai/grok-4.5). ~$2/$6 per 1M, 500k ctx; 'High' effort is a param; not in the EU yet." },
+    { "id": "qwen-3.7-max",      "name": "Qwen 3.7 Max",               "spec": "qwen/qwen3.7-max",                "provider": "openrouter", "verify": false, "note": "Confirmed on OpenRouter (Alibaba Qwen3.7 flagship)." },
+    { "id": "deepseek-v4-pro",   "name": "DeepSeek V4 Pro",            "spec": "deepseek/deepseek-v4-pro",        "provider": "openrouter", "verify": false, "note": "Confirmed (openrouter.ai/deepseek/deepseek-v4-pro). ~$0.435/$0.87 per 1M, 1M ctx." },
+    { "id": "minimax-m3",        "name": "MiniMax M3",                 "spec": "minimax/minimax-m3",              "provider": "openrouter", "verify": false, "note": "Confirmed on OpenRouter (openrouter.ai/provider/minimax)." },
+    { "id": "hy3",               "name": "Hy3 (Tencent Hunyuan 3)",    "spec": "tencent/hy3",                     "provider": "openrouter", "verify": false, "note": "Confirmed: Tencent Hunyuan 3, 295B MoE, Apache-2.0. Use tencent/hy3:free for the current free-window run." }
+  ],
+  "fixtures": [
+    { "file": "user_search.js",     "language": "javascript", "clean": false },
+    { "file": "session_cache.py",   "language": "python",     "clean": false },
+    { "file": "upload_handler.ts",  "language": "typescript", "clean": false },
+    { "file": "config_store.go",    "language": "go",         "clean": false },
+    { "file": "device_bridge.py",   "language": "python",     "clean": false },
+    { "file": "hard_rate_limit.ts",  "language": "typescript", "clean": false },
+    { "file": "hard_app_sidebar.tsx", "language": "typescript", "clean": false },
+    { "file": "hard_product_jsonld.ts", "language": "typescript", "clean": false },
+    { "file": "string_utils.js",    "language": "javascript", "clean": true }
+  ],
+  "bugs": [
+    {
+      "id": "B1", "fixture": "user_search.js", "line": 7, "severity": "Critical", "category": "sql-injection",
+      "title": "SQL injection: `term` concatenated into the query string",
+      "patterns": ["sql injection", "parameteri[sz]", "prepared statement", "bind(ing)? (parameter|variable)", "placeholder"]
+    },
+    {
+      "id": "B2", "fixture": "user_search.js", "line": 20, "severity": "Critical", "category": "command-injection",
+      "title": "Command injection: `userId` interpolated into execSync",
+      "patterns": ["command injection", "shell injection", "execfile", "spawn", "arbitrary command", "sanitiz.*(userid|input)"]
+    },
+    {
+      "id": "B3", "fixture": "user_search.js", "line": 11, "severity": "High", "category": "off-by-one",
+      "title": "Off-by-one: `i <= rows.length` reads undefined and throws",
+      "patterns": ["off.?by.?one", "out of bounds", "i ?< ?rows.length", "rows\\[rows.length\\]", "undefined", "length \\+ ?1"]
+    },
+    {
+      "id": "B4", "fixture": "session_cache.py", "line": 23, "window": 6, "severity": "High", "category": "state-not-invalidated",
+      "title": "Revoked sessions still authenticate: `is_authenticated` never checks `revoked`",
+      "patterns": ["revok", "still (authenticat|valid)", "not (checked|invalidated|honoured|honored)", "bypass"]
+    },
+    {
+      "id": "B5", "fixture": "session_cache.py", "line": 29, "window": 5, "severity": "High", "category": "bad-default-index",
+      "title": "`index=-1` default: `history[-1]` throws IndexError on empty history / silently wraps",
+      "patterns": ["indexerror", "empty (list|history)", "out of range", "-1", "silently.*(wrap|last)", "bounds"]
+    },
+    {
+      "id": "B6", "fixture": "session_cache.py", "line": 37, "window": 4, "severity": "Medium", "category": "stale-fallback",
+      "title": "Broad `except` returns stale, wrong-shaped cached data and hides errors",
+      "patterns": ["bare except", "broad except", "except exception", "swallow", "hides? .*(error|exception)", "stale", "wrong.?shape", "masks?"]
+    },
+    {
+      "id": "B7", "fixture": "upload_handler.ts", "line": 13, "window": 6, "severity": "Critical", "category": "path-traversal",
+      "title": "Path traversal: unsanitised `filename` joined onto UPLOAD_DIR",
+      "patterns": ["path traversal", "directory traversal", "\\.\\./", "traversal", "sanitiz.*(path|filename)", "escape.*(directory|upload)"]
+    },
+    {
+      "id": "B8", "fixture": "upload_handler.ts", "line": 16, "window": 3, "severity": "High", "category": "missing-await",
+      "title": "`fs.writeFile` not awaited: returns before write completes; unhandled rejection",
+      "patterns": ["await", "not awaited", "missing await", "unhandled (promise )?rejection", "race", "returns before"]
+    },
+    {
+      "id": "B9", "fixture": "upload_handler.ts", "line": 12, "window": 5, "severity": "Medium", "category": "missing-validation",
+      "title": "No validation of upload filename / size / content-type",
+      "patterns": ["validat", "size limit", "content.?type", "mime", "file type", "no .*limit", "allow.?list"]
+    },
+    {
+      "id": "B10", "fixture": "config_store.go", "line": 20, "window": 8, "severity": "High", "category": "nil-map-panic",
+      "title": "Write to nil map: `flags` never initialised, `Set`/`LoadFromFile` panic",
+      "patterns": ["nil map", "assignment to entry in nil map", "not initiali[sz]ed", "uninitiali[sz]ed", "make\\(map", "panic"]
+    },
+    {
+      "id": "B11", "fixture": "config_store.go", "line": 25, "window": 3, "severity": "High", "category": "ignored-error",
+      "title": "`os.Open` error ignored; nil file passed to the JSON decoder",
+      "patterns": ["ignore.*error", "error.*ignore", "unchecked error", "f, ?_ :=", "os.open", "nil (file|reader)", "discard.*error"]
+    },
+    {
+      "id": "B12", "fixture": "config_store.go", "line": 25, "window": 4, "severity": "Low", "category": "resource-leak",
+      "title": "Opened file never closed (missing `defer f.Close()`)",
+      "patterns": ["defer .*close", "f.close", "not closed", "never closed", "resource leak", "file (descriptor|handle) leak"]
+    },
+    {
+      "id": "B13", "fixture": "device_bridge.py", "line": 34, "window": 6, "severity": "High", "category": "native-ref-gc",
+      "title": "Native event filter is GC'd: installNativeEventFilter keeps no Python reference -> dangling C++ pointer",
+      "patterns": ["garbage.?collect", "\\bgc'?d?\\b", "dangling", "no (python.?side )?reference", "keep.*(a )?reference", "not (kept|retained|referenced|held).*(alive|reference)", "installnativeeventfilter", "strong reference", "goes out of scope"]
+    },
+    {
+      "id": "B14", "fixture": "device_bridge.py", "line": 44, "window": 6, "severity": "High", "category": "com-release-ordering",
+      "title": "COM objects released after CoUninitialize(): Release() runs on a torn-down apartment -> access violation",
+      "patterns": ["couninitialize", "access violation", "outliv", "apartment", "released? (after|before)", "com object.*(alive|release|refcount)", "refcount", "torn down", "before .*uninit"]
+    },
+    {
+      "id": "B15", "fixture": "device_bridge.py", "line": 64, "window": 4, "severity": "Medium", "category": "stale-cache-not-invalidated",
+      "title": "Cache never invalidated on failure: an unplugged device is reported as present indefinitely",
+      "patterns": ["stale", "invalidat", "never (cleared|reset|invalidated)", "cache.*(stale|not clear|never|wrong)", "unplugged", "last.?known", "returns? .*(cached|stale)"]
+    },
+    {
+      "id": "B16", "fixture": "hard_rate_limit.ts", "line": 40, "window": 8, "severity": "High", "category": "xff-spoofable-leftmost",
+      "title": "Rate-limit key uses the leftmost X-Forwarded-For entry (client-spoofable) -> per-IP limit bypass + row-flood DoS",
+      "patterns": ["x-forwarded-for", "\\bxff\\b", "spoof", "left-?most", "right-?most", "first (entry|ip)", "last (entry|ip)", "client-(spoof|controll|suppli)", "parts\\[0\\]", "bypass.*(rate|limit)", "trusted proxy"]
+    },
+    {
+      "id": "B17", "fixture": "hard_app_sidebar.tsx", "line": 32, "window": 18, "severity": "High", "category": "ssr-hydration-mismatch",
+      "title": "Hydration mismatch: getServerSnapshot always returns 'expanded' but the client renders collapsed-dependent markup",
+      "patterns": ["hydrat", "mismatch", "getserversnapshot", "usesyncexternalstore", "server (snapshot|render)", "client (snapshot|render|value)", "diverge", "suppresshydrationwarning", "server.*client", "client.*server"]
+    },
+    {
+      "id": "B18", "fixture": "hard_product_jsonld.ts", "line": 27, "window": 6, "severity": "Medium", "category": "filter-drops-valid-data",
+      "title": "Brand resolver filters suppliers by URL but only consumes name -> a supplier with no URL is silently dropped from JSON-LD",
+      "patterns": ["filter", "\\.url", "requires? .*url", "silently (drop|lose|omit|discard)", "only .*(name|consum)", "no url", "brand", "json-?ld", "structured data", "fallback.*(category|brand)"]
+    }
+  ]
+}

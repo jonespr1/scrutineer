@@ -1,0 +1,1 @@
+{"run_id": "local-20260714-r2", "started_at": "local-20260714-r2", "trials": 1, "routing": {"openrouter_hosts": "", "sort": "price", "zdr": "false (test-all)", "max_price": "", "quantizations": "any (test-all)"}, "slugs_validated": false, "runner": "local urllib"}
