@@ -5,13 +5,13 @@
 # no vendor lock-in.
 #
 # CONFIGURE which model(s) review, via repo Variables:
-#   REVIEWERS       Comma-separated list of 1-2 reviewer "slots". Each slot is either:
+#   REVIEWERS       Comma-separated list of reviewer "slots" (typically 1-3). Each slot is either:
 #                     gemini                -> Google Gemini API direct (model = GEMINI_MODEL)
 #                     gemini:<model>        -> Google Gemini API direct, specific model
 #                     <openrouter-model-id> -> via OpenRouter, e.g. z-ai/glm-5.2 or
 #                                              google/gemini-2.5-flash
-#                   Default: "gemini, z-ai/glm-5.2" (Gemini Flash + GLM). Two slots = two
-#                   independent reviews (a second opinion). A repo overrides this per its needs
+#                   Default: "gemini, z-ai/glm-5.2, minimax/minimax-m3" (Flash + GLM + MiniMax).
+#                   Multiple slots = independent, diverse second opinions. A repo overrides this
 #                   (e.g. REVIEWERS = gemini for a Gemini-only repo with no OpenRouter key).
 #                   Examples:
 #                     REVIEWERS = gemini
@@ -20,10 +20,10 @@
 #   GEMINI_MODEL    Model for a bare "gemini" slot (default: gemini-flash-latest).
 #
 # OpenRouter routing controls (apply to every OpenRouter slot) - repo Variables:
-#   OPENROUTER_HOSTS     Allow-list of host slugs (e.g. "novita,fireworks,together,gmicloud").
-#                        RECOMMENDED for open-weight models (e.g. GLM): it is the only way to
-#                        guarantee jurisdiction/quality. Leave empty for closed models routed
-#                        to a single first-party host (e.g. google/*).
+#   OPENROUTER_HOSTS     Allow-list of host slugs. Default: "novita,fireworks,together,gmicloud"
+#                        (non-Chinese, fp8) - the only way to guarantee jurisdiction/quality for
+#                        open-weight models. With OPENROUTER_SORT=price, routing then picks the
+#                        cheapest allowed host per model. Override per repo, or set one host to pin.
 #   OPENROUTER_SORT      price (default) | throughput | latency
 #   OPENROUTER_MAXPRICE  optional hard ceiling "$in,$out" per 1M tokens, e.g. "2,6"
 #   OPENROUTER_ZDR       zero-data-retention hosts only. Default: true. Set "false" to allow
@@ -100,7 +100,18 @@ jobs:
           COMMENTS_JSON="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate 2>/dev/null | jq -s 'add // []' 2>/dev/null || echo '[]')"
 
           # 1) Diff (truncate on a line boundary so we never send a half hunk).
-          DIFF="$(gh pr diff "$PR_NUMBER" --repo "$REPO" || true)"
+          # Fetch the diff with retries, distinguishing a real fetch FAILURE from a genuinely empty
+          # diff. A failed fetch used to fall through to "empty -> exit 0" - a silent green no-op
+          # during a GitHub API outage. Now we retry, then fail loudly so the run shows red.
+          DIFF=""; drc=1
+          for da in 1 2 3; do
+            DIFF="$(gh pr diff "$PR_NUMBER" --repo "$REPO" 2>/dev/null)" && { drc=0; break; }
+            drc=$?; echo "diff fetch attempt $da failed (rc=$drc)"; [ "$da" -lt 3 ] && sleep $((da*5))
+          done
+          if [ "$drc" -ne 0 ]; then
+            echo "::error::Could not fetch the PR diff after 3 attempts (GitHub API degraded?). Failing rather than silently posting nothing."
+            exit 1
+          fi
           if [ -z "$DIFF" ]; then echo "Empty diff; nothing to review."; exit 0; fi
           MAX=200000
           TRUNC_NOTE=""
@@ -242,7 +253,8 @@ jobs:
             if [ -z "${OPENROUTER_API_KEY:-}" ]; then printf '⚠️ OPENROUTER_API_KEY is not set for this repo.'; return; fi
             sort="${OPENROUTER_SORT:-price}"
             base="$(jq -n --arg s "$sort" '{data_collection:"deny", sort:$s, allow_fallbacks:true}')"
-            [ -n "${OPENROUTER_HOSTS:-}" ] && base="$(printf '%s' "$base" | jq --arg l "$OPENROUTER_HOSTS" '. + {only:($l|split(",")|map(gsub("^ +| +$";"")))}')"
+            HOSTS="${OPENROUTER_HOSTS:-novita,fireworks,together,gmicloud}"  # compliant (non-Chinese, fp8) default; price-sort picks the cheapest allowed host
+            [ -n "$HOSTS" ] && base="$(printf '%s' "$base" | jq --arg l "$HOSTS" '. + {only:($l|split(",")|map(gsub("^ +| +$";"")))}')"
             # Zero data retention is ON by default; set OPENROUTER_ZDR=false to allow non-ZDR hosts.
             [ "${OPENROUTER_ZDR:-true}" != "false" ] && base="$(printf '%s' "$base" | jq '. + {zdr:true}')"
             [ -n "${OPENROUTER_MAXPRICE:-}" ] && base="$(printf '%s' "$base" | jq --arg m "$OPENROUTER_MAXPRICE" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:(.[1]|tonumber)}})')"
@@ -351,7 +363,7 @@ jobs:
           FILTER="$(printf '%s' "${COMMENT_BODY:-}" | grep -ioE '@review[[:space:]]+[[:alnum:]:_./-]+' | head -1 | sed -E 's/^@review[[:space:]]+//I' | tr '[:upper:]' '[:lower:]' || true)"
           case "$FILTER" in all|both|everyone) FILTER="" ;; esac
 
-          IFS=',' read -ra SLOTS <<< "${REVIEWERS:-gemini, z-ai/glm-5.2}"
+          IFS=',' read -ra SLOTS <<< "${REVIEWERS:-gemini, z-ai/glm-5.2, minimax/minimax-m3}"
           SELECTED=()
           for spec in "${SLOTS[@]}"; do
             spec="${spec//[[:space:]]/}"; [ -z "$spec" ] && continue
