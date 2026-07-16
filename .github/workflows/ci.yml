@@ -1,6 +1,6 @@
-# CI for scrutineer — the cross-vendor PR reviewer holds itself to the Stour
-# standard. This repo is PowerShell + GitHub Actions (no npm), so instead of the
-# Node stour-ci caller it runs the checks that fit its content:
+# CI for scrutineer - the cross-vendor PR reviewer holds itself to the same bar
+# it enforces. This repo is PowerShell + GitHub Actions (no npm), so it runs the
+# checks that fit its content:
 #   secret-scan (gitleaks, full history) · actionlint · PSScriptAnalyzer.
 #
 # Third-party actions are SHA-pinned. persist-credentials:false on checkout.
@@ -59,7 +59,7 @@ jobs:
       # expand) is an INFO-level false positive here: review.yml intentionally
       # single-quotes $ inside jq filters and literal LLM-prompt text. Exclude
       # just that one code; every other shellcheck finding still gates.
-      # TODO: pin the release asset by SHA-256 once verified (as in stour-standards).
+      # TODO: pin the release asset by SHA-256 once verified.
       - name: actionlint
         env:
           SHELLCHECK_OPTS: "--exclude=SC2016"

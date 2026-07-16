@@ -1,4 +1,4 @@
-# Stour baseline gitleaks config (see jonespr1/stour-standards assets/gitleaks.toml).
+# Baseline gitleaks config for scrutineer.
 # Extends the full default ruleset and allowlists ONLY test fixtures/mocks, where
 # fake credentials live by design. Docs, source, config, and data stay fully
 # scanned — a real key (including a Stripe *test* key) pasted into a README or app
@@ -9,7 +9,7 @@
 # [allowlist] table; the [[allowlists]] array form is silently ignored (verified
 # empirically 2026-07-14). No secret-regex allowlist here on purpose: a global
 # regex (e.g. sk_test_) would blind-spot source, so allowlisting is path-scoped.
-title = "Stour baseline"
+title = "scrutineer gitleaks baseline"
 
 [extend]
 useDefault = true
