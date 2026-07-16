@@ -231,9 +231,9 @@ jobs:
             fi
             # Telemetry -> temp file the caller reads (functions run in a subshell, so globals won't
             # propagate). Gemini has no USD in its response, so cost is left "na" (estimate from tokens).
-            pt="$(printf '%s' "$resp" | jq -r '.usageMetadata.promptTokenCount // 0' 2>/dev/null)"
-            ct="$(printf '%s' "$resp" | jq -r '.usageMetadata.candidatesTokenCount // 0' 2>/dev/null)"
-            [ -n "${SLOT_META:-}" ] && printf '%s %s na' "${pt:-0}" "${ct:-0}" > "$SLOT_META"
+            pt="$(printf '%s' "$resp" | jq -r '.usageMetadata.promptTokenCount // 0' 2>/dev/null || echo 0)"
+            ct="$(printf '%s' "$resp" | jq -r '.usageMetadata.candidatesTokenCount // 0' 2>/dev/null || echo 0)"
+            [ -n "${SLOT_META:-}" ] && printf '%s %s na\n' "${pt:-0}" "${ct:-0}" > "$SLOT_META"
             printf '%s' "$text"
           }
           call_openrouter() {
@@ -267,10 +267,13 @@ jobs:
               text="$(printf '⚠️ Could not generate review.\n\n```\n%s\n```' "$why")"
             fi
             # Telemetry: tokens + OpenRouter's real USD cost (usage.include:true above).
-            pt="$(printf '%s' "$resp" | jq -r '.usage.prompt_tokens // 0' 2>/dev/null)"
-            ct="$(printf '%s' "$resp" | jq -r '.usage.completion_tokens // 0' 2>/dev/null)"
-            cost="$(printf '%s' "$resp" | jq -r '.usage.cost // "na"' 2>/dev/null)"
-            [ -n "${SLOT_META:-}" ] && printf '%s %s %s' "${pt:-0}" "${ct:-0}" "${cost:-na}" > "$SLOT_META"
+            pt="$(printf '%s' "$resp" | jq -r '.usage.prompt_tokens // 0' 2>/dev/null || echo 0)"
+            ct="$(printf '%s' "$resp" | jq -r '.usage.completion_tokens // 0' 2>/dev/null || echo 0)"
+            cost="$(printf '%s' "$resp" | jq -r '.usage.cost // "na"' 2>/dev/null || echo na)"
+            # Keep only a decimal number or the literal "na"; anything else (a malformed or hostile
+            # provider value) must not reach the HTML comment marker in the posted review.
+            [ "$cost" = na ] || case "$cost" in ''|*[!0-9.]*) cost=na ;; esac
+            [ -n "${SLOT_META:-}" ] && printf '%s %s %s\n' "${pt:-0}" "${ct:-0}" "${cost:-na}" > "$SLOT_META"
             printf '%s' "$text"
           }
           post_review() {
@@ -330,7 +333,9 @@ jobs:
               *)               text="$(call_openrouter "$model")" ;;
             esac
             t1=$SECONDS; lat=$((t1 - t0))
-            [ -s "$SLOT_META" ] && read -r pt ct cost < "$SLOT_META"
+            # read returns non-zero on a newline-less file even after assigning; guard it so the
+            # slot's subshell can't die here under set -e before post_review runs.
+            [ -s "$SLOT_META" ] && { read -r pt ct cost < "$SLOT_META" || true; }
             rm -f "$SLOT_META"; unset SLOT_META
             echo "  $label: ${lat}s, in=${pt} out=${ct} cost=${cost}"
             post_review "$label" "$text" "$lat" "$pt" "$ct" "$cost"
