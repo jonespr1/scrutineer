@@ -233,6 +233,7 @@ jobs:
             # propagate). Gemini has no USD in its response, so cost is left "na" (estimate from tokens).
             pt="$(printf '%s' "$resp" | jq -r '.usageMetadata.promptTokenCount // 0' 2>/dev/null || echo 0)"
             ct="$(printf '%s' "$resp" | jq -r '.usageMetadata.candidatesTokenCount // 0' 2>/dev/null || echo 0)"
+            case "$pt" in ''|*[!0-9]*) pt=0 ;; esac; case "$ct" in ''|*[!0-9]*) ct=0 ;; esac
             [ -n "${SLOT_META:-}" ] && printf '%s %s na\n' "${pt:-0}" "${ct:-0}" > "$SLOT_META"
             printf '%s' "$text"
           }
@@ -269,6 +270,7 @@ jobs:
             # Telemetry: tokens + OpenRouter's real USD cost (usage.include:true above).
             pt="$(printf '%s' "$resp" | jq -r '.usage.prompt_tokens // 0' 2>/dev/null || echo 0)"
             ct="$(printf '%s' "$resp" | jq -r '.usage.completion_tokens // 0' 2>/dev/null || echo 0)"
+            case "$pt" in ''|*[!0-9]*) pt=0 ;; esac; case "$ct" in ''|*[!0-9]*) ct=0 ;; esac
             cost="$(printf '%s' "$resp" | jq -r '.usage.cost // "na"' 2>/dev/null || echo na)"
             # Keep only a decimal number or the literal "na"; anything else (a malformed or hostile
             # provider value) must not reach the HTML comment marker in the posted review.
