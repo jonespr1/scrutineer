@@ -256,7 +256,7 @@ jobs:
             printf '%s' "$text"
           }
           call_openrouter() {
-            local model="$1" req resp text err base prov sort http rc fr why pt ct cost timeout=300 HOSTS MP
+            local model="$1" req resp text err base prov sort http rc fr why pt ct cost timeout=300 HOSTS MP mp_re
             if [ -z "${OPENROUTER_API_KEY:-}" ]; then printf '⚠️ OPENROUTER_API_KEY is not set for this repo.'; return; fi
             sort="${OPENROUTER_SORT:-throughput}"
             base="$(jq -n --arg s "$sort" '{data_collection:"deny", sort:$s, allow_fallbacks:true}')"
@@ -268,11 +268,14 @@ jobs:
             # $/1M ceiling "in,out": with throughput sort this stops routing to a premium (fast but dear)
             # host. Default "2,6" (headroom over our models' ~$1.3/1M); set OPENROUTER_MAXPRICE=none to disable.
             MP="${OPENROUTER_MAXPRICE:-2,6}"
-            case "$MP" in
-              none|off|any)     MP="" ;;
-              *[!0-9.,]*|,*|*,) echo "Ignoring malformed OPENROUTER_MAXPRICE='$MP' (want 'in' or 'in,out')."; MP="" ;;
-            esac
-            # A single value applies to both in and out (.[1]//.[0]) - avoids a null|tonumber crash under set -e.
+            case "$MP" in none|off|any) MP="" ;; esac
+            # Require a number or "in,out" of numbers; anything else (letters, ".", "..", "2.", stray
+            # commas) is dropped rather than crashing jq's tonumber under set -e.
+            mp_re='^[0-9]+(\.[0-9]+)?(,[0-9]+(\.[0-9]+)?)?$'
+            if [ -n "$MP" ] && ! [[ "$MP" =~ $mp_re ]]; then
+              echo "Ignoring malformed OPENROUTER_MAXPRICE='$MP' (want a number or 'in,out')."; MP=""
+            fi
+            # A single value applies to both in and out (.[1]//.[0]).
             [ -n "$MP" ] && base="$(printf '%s' "$base" | jq --arg m "$MP" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:((.[1]//.[0])|tonumber)}})')"
             prov="$base"
             # Build the request and send it via stdin, never argv (see call_gemini): the prompt is far
