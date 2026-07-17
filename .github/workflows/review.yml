@@ -268,12 +268,13 @@ jobs:
             # $/1M ceiling "in,out": with throughput sort this stops routing to a premium (fast but dear)
             # host. Default "2,6" (headroom over our models' ~$1.3/1M); set OPENROUTER_MAXPRICE=none to disable.
             MP="${OPENROUTER_MAXPRICE:-2,6}"
-            case "$MP" in none|off|any) MP="" ;; esac
-            # Require a number or "in,out" of numbers; anything else (letters, ".", "..", "2.", stray
-            # commas) is dropped rather than crashing jq's tonumber under set -e.
+            MP="${MP//[[:space:]]/}"                    # tolerate "2, 6" / " 2.5 "
+            case "$MP" in none|off|any) MP="" ;; esac   # explicit opt-out -> no ceiling
+            # A malformed value (letters, ".", "2.", stray commas) falls back to the safe default rather
+            # than failing OPEN (no ceiling) - a typo must not silently remove the cost guard.
             mp_re='^[0-9]+(\.[0-9]+)?(,[0-9]+(\.[0-9]+)?)?$'
             if [ -n "$MP" ] && ! [[ "$MP" =~ $mp_re ]]; then
-              echo "Ignoring malformed OPENROUTER_MAXPRICE='$MP' (want a number or 'in,out')."; MP=""
+              echo "Malformed OPENROUTER_MAXPRICE='${OPENROUTER_MAXPRICE}'; using default 2,6."; MP="2,6"
             fi
             # A single value applies to both in and out (.[1]//.[0]).
             [ -n "$MP" ] && base="$(printf '%s' "$base" | jq --arg m "$MP" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:((.[1]//.[0])|tonumber)}})')"
