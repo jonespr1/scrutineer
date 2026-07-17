@@ -101,12 +101,14 @@ jobs:
           COMMENTS_JSON="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate 2>/dev/null | jq -s 'add // []' 2>/dev/null || echo '[]')"
 
           # 1) Diff (truncate on a line boundary so we never send a half hunk).
-          # Fetch the diff with retries, distinguishing a real fetch FAILURE from a genuinely empty
-          # diff. A failed fetch used to fall through to "empty -> exit 0" - a silent green no-op
-          # during a GitHub API outage. Now we retry, then fail loudly so the run shows red.
+          # Fetch via the API, NOT `gh pr diff`: on issue_comment (@review) events the workspace only
+          # has the base branch checked out, so `gh pr diff` diffs against local git that lacks the PR
+          # commits and returns EMPTY -> the review silently no-ops. `gh api ... Accept: diff` always
+          # uses the API, so @review works the same as a push. Retry, then fail loudly (never a silent
+          # "empty -> exit 0") so a real fetch failure shows red instead of doing nothing.
           DIFF=""; drc=1
           for da in 1 2 3; do
-            if DIFF="$(gh pr diff "$PR_NUMBER" --repo "$REPO" 2>/dev/null)"; then
+            if DIFF="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" -H "Accept: application/vnd.github.v3.diff" 2>/dev/null)"; then
               drc=0; break
             else
               drc=$?; echo "diff fetch attempt $da failed (rc=$drc)"; [ "$da" -lt 3 ] && sleep $((da*5))
