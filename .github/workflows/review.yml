@@ -22,11 +22,12 @@
 # OpenRouter routing controls (apply to every OpenRouter slot) - repo Variables:
 #   OPENROUTER_HOSTS     Allow-list of host slugs. Default: "novita,fireworks,together,gmicloud"
 #                        (non-Chinese, fp8) - the only way to guarantee jurisdiction/quality for
-#                        open-weight models. With OPENROUTER_SORT=price, routing then picks the
-#                        cheapest allowed host per model. Override per repo, set one host to pin, or
+#                        open-weight models. With OPENROUTER_SORT (throughput by default) routing picks
+#                        the fastest allowed host under OPENROUTER_MAXPRICE. Override per repo, pin one, or
 #                        set to "any" to route to all hosts (e.g. for closed models like google/*).
-#   OPENROUTER_SORT      price (default) | throughput | latency
-#   OPENROUTER_MAXPRICE  optional hard ceiling "$in,$out" per 1M tokens, e.g. "2,6"
+#   OPENROUTER_SORT      throughput (default) | price | latency
+#   OPENROUTER_MAXPRICE  hard $/1M ceiling "in,out" (a single value = both). Default "2,6" (fastest host
+#                        under it). Premium models (anthropic/*, openai/*) exceed it - set "none" for those.
 #   OPENROUTER_ZDR       zero-data-retention hosts only. Default: true. Set "false" to allow
 #                        non-ZDR hosts (needed for models that have no ZDR host on OpenRouter).
 #
@@ -255,16 +256,28 @@ jobs:
             printf '%s' "$text"
           }
           call_openrouter() {
-            local model="$1" req resp text err base prov sort http rc fr why pt ct cost timeout=300
+            local model="$1" req resp text err base prov sort http rc fr why pt ct cost timeout=300 HOSTS MP mp_re
             if [ -z "${OPENROUTER_API_KEY:-}" ]; then printf '⚠️ OPENROUTER_API_KEY is not set for this repo.'; return; fi
-            sort="${OPENROUTER_SORT:-price}"
+            sort="${OPENROUTER_SORT:-throughput}"
             base="$(jq -n --arg s "$sort" '{data_collection:"deny", sort:$s, allow_fallbacks:true}')"
-            HOSTS="${OPENROUTER_HOSTS:-novita,fireworks,together,gmicloud}"  # compliant (non-Chinese, fp8) default; price-sort picks the cheapest allowed host
+            HOSTS="${OPENROUTER_HOSTS:-novita,fireworks,together,gmicloud}"  # compliant (non-Chinese, fp8) default; throughput-sort picks the fastest allowed host under MAXPRICE
             case "$HOSTS" in any|all|'*') HOSTS="" ;; esac  # opt out of the allow-list (e.g. closed models like google/* routed via OpenRouter). NB: the env block always sets this var, so ':-' (not '-') + this keyword is how a repo disables the default.
             [ -n "$HOSTS" ] && base="$(printf '%s' "$base" | jq --arg l "$HOSTS" '. + {only:($l|split(",")|map(gsub("^ +| +$";"")))}')"
             # Zero data retention is ON by default; set OPENROUTER_ZDR=false to allow non-ZDR hosts.
             [ "${OPENROUTER_ZDR:-true}" != "false" ] && base="$(printf '%s' "$base" | jq '. + {zdr:true}')"
-            [ -n "${OPENROUTER_MAXPRICE:-}" ] && base="$(printf '%s' "$base" | jq --arg m "$OPENROUTER_MAXPRICE" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:(.[1]|tonumber)}})')"
+            # $/1M ceiling "in,out": with throughput sort this stops routing to a premium (fast but dear)
+            # host. Default "2,6" (headroom over our models' ~$1.3/1M); set OPENROUTER_MAXPRICE=none to disable.
+            MP="${OPENROUTER_MAXPRICE:-2,6}"
+            MP="${MP//[[:space:]]/}"                    # tolerate "2, 6" / " 2.5 "
+            case "$MP" in none|off|any) MP="" ;; esac   # explicit opt-out -> no ceiling
+            # A malformed value (letters, ".", "2.", stray commas) falls back to the safe default rather
+            # than failing OPEN (no ceiling) - a typo must not silently remove the cost guard.
+            mp_re='^[0-9]+(\.[0-9]+)?(,[0-9]+(\.[0-9]+)?)?$'
+            if [ -n "$MP" ] && ! [[ "$MP" =~ $mp_re ]]; then
+              echo "Malformed OPENROUTER_MAXPRICE='${OPENROUTER_MAXPRICE}'; using default 2,6."; MP="2,6"
+            fi
+            # A single value applies to both in and out (.[1]//.[0]).
+            [ -n "$MP" ] && base="$(printf '%s' "$base" | jq --arg m "$MP" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:((.[1]//.[0])|tonumber)}})')"
             prov="$base"
             # Build the request and send it via stdin, never argv (see call_gemini): the prompt is far
             # larger than the OS single-argument limit once file context is included.
@@ -276,7 +289,7 @@ jobs:
               # Report the actual cause, never a bare "no response".
               err="$(printf '%s' "$resp" | jq -r '.error.message // empty' 2>/dev/null)"
               fr="$(printf '%s' "$resp" | jq -r '.choices[0].finish_reason // empty' 2>/dev/null)"
-              if   [ "$rc" = 28 ];         then why="the model did not respond within ${timeout}s (try OPENROUTER_SORT=throughput, add faster hosts to OPENROUTER_HOSTS, or reduce the diff size)"
+              if   [ "$rc" = 28 ];         then why="the model did not respond within ${timeout}s (raise OPENROUTER_MAXPRICE to allow faster hosts, or reduce the diff size / CONTEXT_BUDGET)"
               elif [ "$rc" != 0 ];         then why="could not reach OpenRouter (curl exit $rc)"
               elif [ -n "$err" ];          then why="OpenRouter error${http:+ (HTTP $http)}: $err"
               elif [ "$fr" = "length" ];   then why="the model hit its output limit before finishing the review (finish_reason=length)"
