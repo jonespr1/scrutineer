@@ -114,15 +114,20 @@ jobs:
           REPO_FILES=""
           if [ -n "${HEAD_SHA:-}" ]; then
             REPO_FILES="$(gh api "repos/${REPO}/git/trees/${HEAD_SHA}?recursive=1" --jq '.tree[] | select(.type=="blob") | .path' 2>/dev/null | head -3000 || true)"
-            if [ "${#REPO_FILES}" -gt 60000 ]; then REPO_FILES="${REPO_FILES:0:60000}"$'\n...(file list truncated)'; fi
+            # Truncate on a newline boundary so we never present a half path (e.g. "src/compone").
+            if [ "${#REPO_FILES}" -gt 60000 ]; then
+              REPO_FILES="${REPO_FILES:0:60000}"; REPO_FILES="${REPO_FILES%$'\n'*}"$'\n...(file list truncated)'
+            fi
           fi
 
           # CI conclusion on the head commit, so the reviewer can calibrate severity (don't cry
           # 🔴/🟠 for something a passing suite already exercises). passing | failing | pending | none.
+          # Modern GitHub check-runs only (Actions + Apps); repos on legacy commit *statuses* alone
+          # (some Jenkins/CircleCI webhooks) report "none", which the prompt treats as "no signal".
           CI_STATE="none"
           if [ -n "${HEAD_SHA:-}" ]; then
-            CI_STATE="$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs" --jq '
-              (.check_runs // []) as $r
+            CI_STATE="$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs" --paginate 2>/dev/null | jq -sr '
+              [.[] | (.check_runs // [])[]] as $r
               | if ($r|length) == 0 then "none"
                 elif ($r|map(select(.conclusion=="failure" or .conclusion=="timed_out" or .conclusion=="cancelled"))|length) > 0 then "failing"
                 elif ($r|map(select(.status!="completed"))|length) > 0 then "pending"
