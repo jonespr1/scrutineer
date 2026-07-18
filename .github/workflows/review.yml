@@ -465,8 +465,14 @@ jobs:
             [ "$need_or" = 1 ] && msg="${msg} Add the **OPENROUTER_API_KEY** secret (for OpenRouter models)."
             [ "$need_gm" = 1 ] && msg="${msg} Add the **GEMINI_API_KEY** secret (for direct Gemini)."
             msg="${msg} Repo Settings → Secrets and variables → Actions → Secrets. See the Scrutineer README."
-            printf '%s' "$msg" | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file - || true
-            echo "No runnable slot (missing keys); posted a one-time config notice."
+            # Post once: skip if we've already said it on this PR, so repeated @review while the keys
+            # are still being configured doesn't spam identical notices.
+            if printf '%s' "$COMMENTS_JSON" | jq -e 'map(select(.user.type=="Bot" and (.body|contains("no API key is configured"))))|length > 0' >/dev/null 2>&1; then
+              echo "No runnable slot (missing keys); config notice already present - skipping."
+            else
+              printf '%s' "$msg" | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file - || true
+              echo "No runnable slot (missing keys); posted a config notice."
+            fi
             exit 0
           fi
 
