@@ -63,6 +63,7 @@ jobs:
     permissions:
       contents: 'read'
       issues: 'read'
+      checks: 'read'          # read the head commit's check-runs to calibrate finding severity
       pull-requests: 'write'
     steps:
       - name: 'Checkout (for optional .review/styleguide.md)'
@@ -90,6 +91,12 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Preflight: strip whitespace/newlines from the keys. A trailing newline pasted into a
+          # Secret is a common cause of OpenRouter's "Missing Authentication header" (and a broken
+          # Gemini auth) - normalise it here so a stray character can't produce a failed review.
+          GEMINI_API_KEY="$(printf '%s' "${GEMINI_API_KEY:-}" | tr -d '[:space:]')"
+          OPENROUTER_API_KEY="$(printf '%s' "${OPENROUTER_API_KEY:-}" | tr -d '[:space:]')"
+
           if [ -z "${PR_NUMBER:-}" ]; then echo "No PR number; nothing to review."; exit 0; fi
 
           # Resolve the PR head commit (pull_request provides it; issue_comment must fetch it).
@@ -100,6 +107,33 @@ jobs:
 
           # Fetch the comment thread once; reused for de-dupe and for re-review history.
           COMMENTS_JSON="$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate 2>/dev/null | jq -s 'add // []' 2>/dev/null || echo '[]')"
+
+          # Repo file list at the PR head, so a reviewer can tell what exists and never claim a file,
+          # asset or import is "missing" when it's simply outside the diff (a recurring false positive).
+          # Bounded (paths only, largest repos truncated) - it's a guard rail, not full context.
+          REPO_FILES=""
+          if [ -n "${HEAD_SHA:-}" ]; then
+            REPO_FILES="$(gh api "repos/${REPO}/git/trees/${HEAD_SHA}?recursive=1" --jq '.tree[] | select(.type=="blob") | .path' 2>/dev/null | head -3000 || true)"
+            # Truncate on a newline boundary so we never present a half path (e.g. "src/compone").
+            if [ "${#REPO_FILES}" -gt 60000 ]; then
+              REPO_FILES="${REPO_FILES:0:60000}"; REPO_FILES="${REPO_FILES%$'\n'*}"$'\n...(file list truncated)'
+            fi
+          fi
+
+          # CI conclusion on the head commit, so the reviewer can calibrate severity (don't cry
+          # 🔴/🟠 for something a passing suite already exercises). passing | failing | pending | none.
+          # Modern GitHub check-runs only (Actions + Apps); repos on legacy commit *statuses* alone
+          # (some Jenkins/CircleCI webhooks) report "none", which the prompt treats as "no signal".
+          CI_STATE="none"
+          if [ -n "${HEAD_SHA:-}" ]; then
+            CI_STATE="$(gh api "repos/${REPO}/commits/${HEAD_SHA}/check-runs" --paginate 2>/dev/null | jq -sr '
+              [.[] | (.check_runs // [])[]] as $r
+              | if ($r|length) == 0 then "none"
+                elif ($r|map(select(.conclusion=="failure" or .conclusion=="timed_out" or .conclusion=="cancelled"))|length) > 0 then "failing"
+                elif ($r|map(select(.status!="completed"))|length) > 0 then "pending"
+                else "passing" end' 2>/dev/null || echo none)"
+            case "$CI_STATE" in passing|failing|pending|none) : ;; *) CI_STATE="none" ;; esac
+          fi
 
           # 1) Diff (truncate on a line boundary so we never send a half hunk).
           # Fetch via the API, NOT `gh pr diff`: on issue_comment (@review) events the workspace only
@@ -191,7 +225,15 @@ jobs:
             'Report only issues you can tie to a specific line and whose concrete failure path you can state.' \
             'Before finalising, re-read each flagged line to confirm it really says what you claim and that the' \
             'surrounding code does not already handle it - do not invent problems. Reserve 🔴 Critical for a' \
-            'demonstrable crash, data loss or security hole. If the change is trivial or looks good, say so plainly.')"
+            'demonstrable crash, data loss or security hole. If the change is trivial or looks good, say so plainly.' \
+            '' \
+            'Do NOT claim a file, asset, import, symbol or route is missing without checking the repository file' \
+            'list provided below: a path being absent from the diff does not mean it is absent from the repo.' \
+            'Calibrate severity against the CI status provided below. If CI is passing, do not raise 🔴 Critical or' \
+            '🟠 High for a failure a normal build/test suite would already have caught (a crash, build break, type' \
+            'error, or failed migration on a path CI exercises) unless you can say why CI would miss it - an' \
+            'untested path, a security or data-loss issue, or a runtime/environment-only condition. When unsure,' \
+            'lower the severity or frame it as a question rather than asserting Critical.')"
           REREVIEW="$(printf '%s\n' \
             'If a PRIOR CONVERSATION section appears below, this is a RE-REVIEW. Treat it as a continuing two-way conversation:' \
             '- Begin with a "## 🔄 Since last review" section: ✅ Resolved (now fixed), 🤝 Acknowledged (the developer gave a sound reason not to change something and you agree - do not raise it again), ⚠️ Still open.' \
@@ -221,6 +263,16 @@ jobs:
 
           Full current content of the changed files (for context beyond the diff):
           ${FILES_CTX}"
+          fi
+          PROMPT="${PROMPT}
+
+          CI status on this PR's head commit: ${CI_STATE} (calibrate finding severity against this)."
+          if [ -n "$REPO_FILES" ]; then
+            PROMPT="${PROMPT}
+
+          Files that exist in the repository at this commit (do NOT claim any of these is missing; a
+          file not shown in the diff still exists):
+          ${REPO_FILES}"
           fi
 
           # 5) Model callers. Each echoes the review text.
@@ -396,6 +448,32 @@ jobs:
           if [ "${#SELECTED[@]}" -eq 0 ]; then
             [ -n "$FILTER" ] && echo "Filter '$FILTER' matched no configured reviewer; running all."
             for spec in "${SLOTS[@]}"; do spec="${spec//[[:space:]]/}"; [ -z "$spec" ] && continue; SELECTED+=("$spec"); done
+          fi
+
+          # Preflight: if NOT ONE selected slot has its key configured, say so once (a clear config
+          # error) instead of silently posting nothing - the #1 "why did no review appear?" cause.
+          # (Per-slot missing-key skips stay silent; this only fires when the whole run can't proceed.)
+          RUNNABLE=0; need_or=0; need_gm=0
+          for spec in "${SELECTED[@]}"; do
+            case "$spec" in
+              gemini|gemini:*) need_gm=1; [ -n "${GEMINI_API_KEY:-}" ]     && RUNNABLE=$((RUNNABLE+1)) ;;
+              *)               need_or=1; [ -n "${OPENROUTER_API_KEY:-}" ] && RUNNABLE=$((RUNNABLE+1)) ;;
+            esac
+          done
+          if [ "$RUNNABLE" -eq 0 ]; then
+            msg="⚠️ Scrutineer is installed but no API key is configured for the selected reviewer(s)."
+            [ "$need_or" = 1 ] && msg="${msg} Add the **OPENROUTER_API_KEY** secret (for OpenRouter models)."
+            [ "$need_gm" = 1 ] && msg="${msg} Add the **GEMINI_API_KEY** secret (for direct Gemini)."
+            msg="${msg} Repo Settings → Secrets and variables → Actions → Secrets. See the Scrutineer README."
+            # Post once: skip if we've already said it on this PR, so repeated @review while the keys
+            # are still being configured doesn't spam identical notices.
+            if printf '%s' "$COMMENTS_JSON" | jq -e 'map(select(.user.type=="Bot" and (.body|contains("no API key is configured"))))|length > 0' >/dev/null 2>&1; then
+              echo "No runnable slot (missing keys); config notice already present - skipping."
+            else
+              printf '%s' "$msg" | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file - || true
+              echo "No runnable slot (missing keys); posted a config notice."
+            fi
+            exit 0
           fi
 
           # Run the selected slots in PARALLEL; wall-clock is the slowest single model, not the sum.
