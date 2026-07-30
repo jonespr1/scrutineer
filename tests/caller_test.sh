@@ -28,7 +28,9 @@ for f in "${FILES[@]}"; do
 
   # 1. The trigger must be anchored. A bare contains(body, '@review') fires on any comment that
   #    merely mentions @review in prose - including one saying it is NOT requesting a review.
-  if grep -q "startsWith(github.event.comment.body, '@review')" "$f"; then
+  #    -F: match the parens literally, not as a regex group - a reformat (extra whitespace inside
+  #    the call) would otherwise still satisfy a regex pattern and silently stop guarding anything.
+  if grep -qF "startsWith(github.event.comment.body, '@review')" "$f"; then
     ok "$n: trigger anchored with startsWith"
   else
     bad "$n: trigger is not anchored - a bare contains() fires on prose mentions"
@@ -36,14 +38,19 @@ for f in "${FILES[@]}"; do
 
   # 2. ...and must also match @review at the start of any LINE, so signing off a long reply with
   #    @review on its own line still works. Without this the anchoring above breaks normal use.
+  #    Pinned to the current format(...)+fromJson('"\n"') implementation rather than the weaker
+  #    "contains a newline+@review somewhere" behaviour, deliberately: if this is ever rewritten
+  #    (e.g. a plain contains(body, '\n@review')), update this pattern in the same commit so the
+  #    test keeps testing what actually ships, not a stale implementation detail.
   if grep -qF "format('{0}@review'" "$f"; then
     ok "$n: also matches @review at line start"
   else
     bad "$n: missing the line-start alternative - sign-off on its own line would not trigger"
   fi
 
-  # 3. The naked form must not reappear alongside them.
-  if grep -q "contains(github.event.comment.body, '@review')" "$f"; then
+  # 3. The naked form must not reappear alongside them. -E + \s* so a spacing variant (no space
+  #    after the comma) can't slip past an exact-string match.
+  if grep -qE "contains\(github\.event\.comment\.body,\s*'@review'\)" "$f"; then
     bad "$n: still contains the unanchored contains(body, '@review') form"
   else
     ok "$n: no unanchored trigger form"
@@ -58,8 +65,12 @@ done
 
 # review.yml must NOT declare job permissions - doing so caps them at what it asks for and any
 # scope added there fails every existing caller at startup (the outage that #15 fixed).
+# The awk range assumes the review job is indented 2 spaces and its steps: key 4 - true today;
+# if the file is ever reformatted, update the pattern here rather than loosen what it checks for.
 RV="$ROOT/.github/workflows/review.yml"
-if awk '/^  review:/,/^    steps:/' "$RV" | grep -q '^    permissions:'; then
+if [ ! -f "$RV" ]; then
+  bad "review.yml: missing at $RV"
+elif awk '/^  review:/,/^    steps:/' "$RV" | grep -q '^    permissions:'; then
   bad "review.yml: declares job permissions - this breaks callers that grant less (see #15)"
 else
   ok "review.yml: declares no job permissions (inherits the caller's)"

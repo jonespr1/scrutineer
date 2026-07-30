@@ -90,7 +90,13 @@ function Read-Secret {
   try { [Runtime.InteropServices.Marshal]::PtrToStringAuto($b) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($b) }
 }
 function Set-RepoVar    { param($Repo,$Name,$Value) gh variable set $Name --repo $Repo --body $Value *> $null }
-function Remove-RepoVar { param($Repo,$Name) gh variable delete $Name --repo $Repo *> $null }
+function Remove-RepoVar { param($Repo,$Name) gh variable delete $Name --repo $Repo *> $null }  # no-op, and silent, if $Name was never set - that is the correct end state either way
+function Get-RepoVar {
+  param($Repo,$Name)
+  $v = gh variable list --repo $Repo --json name,value -q ".[] | select(.name==`"$Name`") | .value" 2>$null
+  if ($LASTEXITCODE -eq 0 -and $v) { return $v }
+  return $null
+}
 function Get-FileSha {
   param($Repo,$Path,$Ref)
   $out = gh api "repos/$Repo/contents/$Path`?ref=$Ref" 2>$null
@@ -160,7 +166,19 @@ foreach ($repo in $Repos) {
   Write-Host "==> Onboarding $repo  [REVIEWERS=$revLabel]" -ForegroundColor Cyan
   if ($geminiKey) { $geminiKey | gh secret set GEMINI_API_KEY     --repo $repo *> $null; Write-Host '    GEMINI_API_KEY set' -ForegroundColor Green }
   if ($orKey)     { $orKey     | gh secret set OPENROUTER_API_KEY --repo $repo *> $null; Write-Host '    OPENROUTER_API_KEY set' -ForegroundColor Green }
-  if ($inheritReviewers) { Remove-RepoVar $repo 'REVIEWERS' } else { Set-RepoVar $repo 'REVIEWERS' $Reviewers }
+  if ($inheritReviewers) {
+    # Warn at the point of impact, not just in the docstring: a repo onboarded before this
+    # script changed its default was very likely pinned to 'gemini', and re-running with no
+    # -Reviewers flag now removes that pin and upgrades the repo to the full (possibly paid,
+    # OpenRouter-inclusive) default panel.
+    $existing = Get-RepoVar $repo 'REVIEWERS'
+    if ($existing) {
+      Write-Host "    REVIEWERS was '$existing' - removing the pin, repo will inherit the default panel" -ForegroundColor Yellow
+    }
+    Remove-RepoVar $repo 'REVIEWERS'
+  } else {
+    Set-RepoVar $repo 'REVIEWERS' $Reviewers
+  }
   if ($OpenRouterHosts)    { Set-RepoVar $repo 'OPENROUTER_HOSTS' $OpenRouterHosts }    else { Remove-RepoVar $repo 'OPENROUTER_HOSTS' }
   if ($OpenRouterSort)     { Set-RepoVar $repo 'OPENROUTER_SORT' $OpenRouterSort }      else { Remove-RepoVar $repo 'OPENROUTER_SORT' }
   if ($OpenRouterMaxPrice) { Set-RepoVar $repo 'OPENROUTER_MAXPRICE' $OpenRouterMaxPrice } else { Remove-RepoVar $repo 'OPENROUTER_MAXPRICE' }
