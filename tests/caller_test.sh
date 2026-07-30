@@ -58,6 +58,9 @@ for f in "${FILES[@]}"; do
 
   # 4. The caller is the single least-privilege control point: review.yml declares NO permissions
   #    and inherits these. Losing a grant here silently degrades or breaks the review.
+  #    Matches the current single-quoted YAML style (contents: 'read'). A reformat to unquoted
+  #    or double-quoted values is a deliberate change - update these strings in the same commit
+  #    rather than loosening the match (same trade-off as the other pinned-string checks above).
   for scope in "contents: 'read'" "issues: 'write'" "pull-requests: 'write'"; do
     grep -qF "$scope" "$f" && ok "$n: grants $scope" || bad "$n: missing grant $scope"
   done
