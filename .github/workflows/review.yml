@@ -198,11 +198,15 @@ jobs:
           [ -f .review/styleguide.md ] && STYLE="$(cat .review/styleguide.md)"
 
           # 3) Prior conversation (our reviews + human replies) for context-aware re-reviews.
+          # `// ""` on every .body read: jq errors on null (the API can return one), and because
+          # the failure is swallowed below a single null comment would silently empty HISTORY -
+          # losing the reviewer all prior conversation on exactly the re-review that needs it.
           HISTORY="$(printf '%s' "$COMMENTS_JSON" | jq -r '
-              map(select((.body | startswith("## 🤖 Review")) or (.user.type == "User")))
-              | map(if (.body | startswith("## 🤖 Review"))
-                    then "### Your previous review:\n" + .body
-                    else "### Developer response (" + .user.login + "):\n" + .body end)
+              def body: .body // "";
+              map(select((body | startswith("## 🤖 Review")) or (.user.type == "User")))
+              | map(if (body | startswith("## 🤖 Review"))
+                    then "### Your previous review:\n" + body
+                    else "### Developer response (" + (.user.login // "unknown") + "):\n" + body end)
               | join("\n\n---\n\n")' 2>/dev/null || true)"
           if [ "${#HISTORY}" -gt 20000 ]; then HISTORY="${HISTORY: -20000}"; fi
 
@@ -388,16 +392,33 @@ jobs:
           already_reviewed() {
             local label="$1"
             [ -z "${HEAD_SHA:-}" ] && return 1
+            # Attribution is ANCHORED, never a substring search over the whole body: a comment
+            # counts as this slot's review only if the header is its FIRST line and its own
+            # marker is its LAST. Models are shown the prior review thread and do sometimes
+            # quote another reviewer's comment back verbatim - marker included - so a
+            # contains() match would credit that reviewer with a review it never ran and
+            # silently skip it on this commit. Anchoring makes a quoted header or marker inert.
+            # (The "could not generate" test stays a contains(): a quoted failure notice at
+            # worst re-runs a review, which is the safe direction to fail.)
+            # Every .body is read through `// ""`: the API can hand back a null body (and jq
+            # errors on null for both split and contains). A single null anywhere in the thread
+            # would abort the whole filter, and since jq's failure is swallowed below the slot
+            # would re-review on every run.
             printf '%s' "$COMMENTS_JSON" | jq -e \
-              --arg head "## 🤖 Review - \`$label\`" --arg sha "sha=$HEAD_SHA" '
+              --arg head "## 🤖 Review - \`$label\`" --arg sha "$HEAD_SHA" '
+              def body: .body // "";
+              def own_review($h; $s):
+                (body | split("\n") | map(rtrimstr("\r"))) as $lines
+                | (($lines | first) // "") == $h
+                and ((($lines | map(select(. != "")) | last) // "")
+                     | startswith("<!-- scrutineer sha=" + $s));
               (map(select(.user.type=="Bot"
-                          and (.body|contains($head))
-                          and (.body|contains($sha))
-                          and ((.body|contains("⚠️ Could not generate review"))|not))) | last) as $a
+                          and own_review($head; $sha)
+                          and ((body|contains("⚠️ Could not generate review"))|not))) | last) as $a
               | if $a==null then false
                 else ([ .[] | select(.user.type=="User"
                           and (.created_at > $a.created_at)
-                          and ((.body|ascii_downcase|gsub("^\\s+";"")|startswith("@review"))|not)) ] | length) == 0
+                          and ((body|ascii_downcase|gsub("^\\s+";"")|startswith("@review"))|not)) ] | length) == 0
                 end' >/dev/null 2>&1
           }
 
@@ -477,7 +498,9 @@ jobs:
             msg="${msg} Repo Settings → Secrets and variables → Actions → Secrets. See the Scrutineer README."
             # Post once: skip if we've already said it on this PR, so repeated @review while the keys
             # are still being configured doesn't spam identical notices.
-            if printf '%s' "$COMMENTS_JSON" | jq -e 'map(select(.user.type=="Bot" and (.body|contains("no API key is configured"))))|length > 0' >/dev/null 2>&1; then
+            # `.body // ""` again: a null body would abort the filter, jq -e would exit non-zero,
+            # and the "already posted?" test would fall through to posting a duplicate notice.
+            if printf '%s' "$COMMENTS_JSON" | jq -e 'map(select(.user.type=="Bot" and ((.body // "")|contains("no API key is configured"))))|length > 0' >/dev/null 2>&1; then
               echo "No runnable slot (missing keys); config notice already present - skipping."
             else
               printf '%s' "$msg" | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file - || true

@@ -45,6 +45,24 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "true"
 
+  unit:
+    name: Unit tests (workflow logic)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # Declared rather than inherited: if the workflow-level default is ever tightened, this job
+    # keeps exactly the checkout access it needs instead of silently losing it.
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      # Behavioural tests for logic embedded in review.yml. They extract the function
+      # straight out of the workflow, so they cannot drift from what ships. jq is
+      # preinstalled on ubuntu-latest.
+      - name: 'De-dupe (already_reviewed)'
+        run: bash tests/dedupe_test.sh
+
   lint:
     name: Lint · actionlint · PSScriptAnalyzer
     runs-on: ubuntu-latest
