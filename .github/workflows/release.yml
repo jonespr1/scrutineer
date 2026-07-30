@@ -50,13 +50,16 @@ jobs:
           # treat a transient 5xx/rate-limit as "absent" and fall through to a create that then
           # 422s; here anything other than a missing-ref error fails loudly with the real message.
           # force=true is required: moving a tag ref is never a fast-forward.
-          err="$(mktemp)"
+          err="$(mktemp)"; trap 'rm -f "$err"' EXIT
           if gh api -X PATCH "repos/${REPO}/git/refs/tags/${major}" \
                -f "sha=${SHA}" -F 'force=true' >/dev/null 2>"$err"; then
             echo "Moved existing $major -> $SHA"
           elif grep -qiE 'not found|does not exist' "$err"; then
-            gh api -X POST "repos/${REPO}/git/refs" \
-              -f "ref=refs/tags/${major}" -f "sha=${SHA}" >/dev/null
+            # Same treatment as the PATCH: surface the real error rather than a bare set -e rc.
+            if ! gh api -X POST "repos/${REPO}/git/refs" \
+                 -f "ref=refs/tags/${major}" -f "sha=${SHA}" >/dev/null 2>"$err"; then
+              echo "Failed to create $major:" >&2; cat "$err" >&2; exit 1
+            fi
             echo "Created $major -> $SHA"
           else
             echo "Failed to update $major:" >&2; cat "$err" >&2; exit 1
