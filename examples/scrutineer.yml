@@ -26,9 +26,14 @@ jobs:
       (github.event.issue.pull_request != null &&
        contains(github.event.comment.body, '@review') &&
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+    # These grants are the single control point: the reusable workflow inherits exactly this set.
+    # 'checks: read' is optional -- it lets the reviewer read the head commit's CI result and
+    # calibrate severity (no Critical/High for something a passing suite already covers). Drop it
+    # and reviews still run; they just lose that signal.
     permissions:
       contents: 'read'
       issues: 'write'
+      checks: 'read'
       pull-requests: 'write'
     # Pin to a tag (recommended) or a commit SHA rather than @main.
     uses: 'jonespr1/scrutineer/.github/workflows/review.yml@v1'

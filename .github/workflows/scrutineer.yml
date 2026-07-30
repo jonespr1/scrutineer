@@ -26,9 +26,12 @@ jobs:
       (github.event.issue.pull_request != null &&
        contains(github.event.comment.body, '@review') &&
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+    # The reusable workflow inherits exactly these grants. 'checks: read' powers CI-aware
+    # severity calibration; it is optional (reviews run fine without it).
     permissions:
       contents: 'read'
       issues: 'write'
+      checks: 'read'
       pull-requests: 'write'
     # Pin to a tag (recommended) or a commit SHA rather than @main.
     uses: 'jonespr1/scrutineer/.github/workflows/review.yml@v1'

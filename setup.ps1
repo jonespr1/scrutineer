@@ -55,9 +55,12 @@ jobs:
       (github.event.issue.pull_request != null &&
        contains(github.event.comment.body, '@review') &&
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
+    # The reusable workflow inherits exactly these grants. 'checks: read' is optional and only
+    # powers CI-aware severity calibration; without it reviews still run.
     permissions:
       contents: 'read'
       issues: 'write'
+      checks: 'read'
       pull-requests: 'write'
     uses: '{{REF}}'
     # Explicit secrets, NOT "secrets: inherit" -- inherit hands the called workflow
