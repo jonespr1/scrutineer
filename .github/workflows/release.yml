@@ -1,0 +1,66 @@
+# Keeps the moving major-version alias (e.g. v1) pointing at the newest release.
+#
+# Every reviewed repo pins the reusable workflow at a MAJOR tag -- "@v1" -- so that
+# non-breaking releases roll out with nothing to change on their side. That only works if
+# "v1" is re-pointed at each new v1.x.y release. This workflow does that automatically.
+#
+# Usage: cut a semver tag and push it, e.g.
+#     git tag -a v1.5.0 <sha> -m "v1.5.0: ..."
+#     git push origin v1.5.0
+# and this job moves "v1" to the same commit (creating it if a brand-new major).
+#
+# For a BREAKING change, tag the new major (v2.0.0); this creates/points "v2" and leaves
+# "v1" untouched, so existing @v1 callers stay on the old line until they opt in.
+name: 'Release: move major alias'
+
+on:
+  push:
+    tags:
+      # Three-part semver only. The moving aliases (v1, v2, ...) have no dots, so moving
+      # them below never re-triggers this workflow -- no loop.
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: 'write'   # needed to create/update the major-alias tag ref
+
+# Two tags pushed close together (v1.4.2 then v1.4.3) would otherwise race, both PATCHing
+# refs/tags/v1, and the alias could settle on the OLDER release. Serialise instead: with
+# cancel-in-progress false the running job finishes, and a newer queued run supersedes an
+# older still-pending one - so the last tag pushed is the one the alias ends on.
+concurrency:
+  group: 'release-move-major-alias'
+  cancel-in-progress: false
+
+jobs:
+  move-major-alias:
+    runs-on: 'ubuntu-latest'
+    steps:
+      - name: 'Point the major alias at this release'
+        env:
+          GH_TOKEN: '${{ github.token }}'
+          # GITHUB_SHA on a tag push is the commit the (annotated or lightweight) tag resolves to.
+          TAG: '${{ github.ref_name }}'          # e.g. v1.5.0
+          REPO: '${{ github.repository }}'
+          SHA: '${{ github.sha }}'
+        run: |
+          set -euo pipefail
+          major="${TAG%%.*}"                      # v1.5.0 -> v1
+          echo "Release $TAG ($SHA) -> moving alias $major"
+          # Update first and create only on a genuine "no such ref". A GET-then-branch would
+          # treat a transient 5xx/rate-limit as "absent" and fall through to a create that then
+          # 422s; here anything other than a missing-ref error fails loudly with the real message.
+          # force=true is required: moving a tag ref is never a fast-forward.
+          err="$(mktemp)"; trap 'rm -f "$err"' EXIT
+          if gh api -X PATCH "repos/${REPO}/git/refs/tags/${major}" \
+               -f "sha=${SHA}" -F 'force=true' >/dev/null 2>"$err"; then
+            echo "Moved existing $major -> $SHA"
+          elif grep -qiE 'not found|does not exist' "$err"; then
+            # Same treatment as the PATCH: surface the real error rather than a bare set -e rc.
+            if ! gh api -X POST "repos/${REPO}/git/refs" \
+                 -f "ref=refs/tags/${major}" -f "sha=${SHA}" >/dev/null 2>"$err"; then
+              echo "Failed to create $major:" >&2; cat "$err" >&2; exit 1
+            fi
+            echo "Created $major -> $SHA"
+          else
+            echo "Failed to update $major:" >&2; cat "$err" >&2; exit 1
+          fi

@@ -60,11 +60,14 @@ jobs:
     # Reviewers run in parallel, so wall-clock is the slowest single model call (per-call
     # ceilings are 300s OpenRouter / 240s Gemini) plus checkout - ~6 min worst case.
     timeout-minutes: 8
-    permissions:
-      contents: 'read'
-      issues: 'read'
-      checks: 'read'          # read the head commit's check-runs to calibrate finding severity
-      pull-requests: 'write'
+    # NO permissions block here - deliberately. A called workflow's permissions may not EXCEED the
+    # calling job's, and a caller that grants less than we request fails at startup (no steps run,
+    # just "startup_failure"). Declaring a set here would therefore break every existing caller the
+    # moment we add a scope to it - which is exactly what `checks: read` did once @v1 moved.
+    # Omitting the block makes the job inherit the caller's grants, so the caller is the single
+    # least-privilege control point (see examples/scrutineer.yml) and new scopes are opt-in:
+    # a caller that adds `checks: read` gets CI-aware severity; one that doesn't degrades to
+    # CI_STATE=none. Never re-add a permissions block here.
     steps:
       - name: 'Checkout (for optional .review/styleguide.md)'
         uses: 'actions/checkout@v4'
