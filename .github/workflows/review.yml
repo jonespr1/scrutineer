@@ -29,9 +29,10 @@
 #   OPENROUTER_IGNORE    Deny-list of host slugs to avoid, e.g. "deepinfra,venice". Prefer this over
 #                        an allow-list: it stays correct as providers are added, and entries are only
 #                        added in response to measured bad throughput/uptime.
-#   OPENROUTER_MAXTOKENS Output ceiling per review. Default 10000; "none" to disable. Latency is
-#                        ~output_tokens/host_throughput, so this bounds the term that causes timeouts.
-#                        A review that hits the ceiling is still posted, truncated.
+#   OPENROUTER_MAXTOKENS Output ceiling per review - a runaway backstop, not a routine limit. Default
+#                        32000; "none" to disable. It is a TOTAL token budget: reasoning models spend
+#                        it before emitting any review, so a tight value yields an EMPTY review that
+#                        you still pay for. Keep it above the ~19k a real review can reach.
 #   OPENROUTER_SORT      throughput (default) | price | latency
 #   OPENROUTER_MAXPRICE  hard $/1M ceiling "in,out" (a single value = both). Default "3,10" (fastest host
 #                        under it). Premium models (anthropic/*, openai/*) exceed it - set "none" for those.
@@ -65,9 +66,9 @@ jobs:
   review:
     runs-on: 'ubuntu-latest'
     # Reviewers run in parallel, so wall-clock is the slowest single model call (per-call
-    # ceilings are 420s OpenRouter / 240s Gemini) plus checkout - ~8 min worst case. The job
+    # ceilings are 600s OpenRouter / 240s Gemini) plus checkout - ~11 min worst case. The job
     # ceiling must stay comfortably above the per-call one or it, not curl, becomes the limit.
-    timeout-minutes: 12
+    timeout-minutes: 15
     # NO permissions block here - deliberately. A called workflow's permissions may not EXCEED the
     # calling job's, and a caller that grants less than we request fails at startup (no steps run,
     # just "startup_failure"). Declaring a set here would therefore break every existing caller the
@@ -326,7 +327,7 @@ jobs:
             printf '%s' "$text"
           }
           call_openrouter() {
-            local model="$1" req resp text err base prov sort http rc fr why pt ct cost host timeout=420 HOSTS IGN MP mp_re MT
+            local model="$1" req resp text err base prov sort http rc fr why pt ct cost host timeout=600 HOSTS IGN MP mp_re MT MT_DEFAULT
             if [ -z "${OPENROUTER_API_KEY:-}" ]; then printf '⚠️ OPENROUTER_API_KEY is not set for this repo.'; return; fi
             sort="${OPENROUTER_SORT:-throughput}"
             base="$(jq -n --arg s "$sort" '{data_collection:"deny", sort:$s, allow_fallbacks:true}')"
@@ -363,13 +364,18 @@ jobs:
             # A single value applies to both in and out (.[1]//.[0]).
             [ -n "$MP" ] && base="$(printf '%s' "$base" | jq --arg m "$MP" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:((.[1]//.[0])|tonumber)}})')"
             prov="$base"
-            # Output ceiling. Latency here is essentially output_tokens / host_throughput - a reviewer
-            # that decides to emit 16k tokens at ~45 tps needs ~350s and blows the timeout, which is
-            # what every OpenRouter timeout we have seen actually was. This bounds the ONLY unbounded
-            # term; it does not limit how much we send, and a review that hits the ceiling is still
-            # posted (truncated) rather than discarded, because we use the content whenever it is
-            # non-empty. Set OPENROUTER_MAXTOKENS=none to remove the cap.
-            MT="${OPENROUTER_MAXTOKENS:-10000}"
+            # Output ceiling - a RUNAWAY BACKSTOP, deliberately well above normal. Latency is roughly
+            # output_tokens / host_throughput, so an unbounded reviewer can blow the timeout. But the
+            # cap must sit ABOVE the observed range or it breaks working reviews: measured legitimate
+            # reviews reach ~19k output tokens, so 10000 (the first value shipped) was below normal and
+            # not a backstop at all.
+            # It is also a TOTAL token budget, not a content budget. A reasoning model spends it on
+            # reasoning FIRST, so a tight cap can be exhausted before a single word of review is
+            # emitted - which returns finish_reason=length with EMPTY content, i.e. billed and useless.
+            # That is exactly what 10000 did to minimax-m3 on a large PR. Hence 32000: above the
+            # observed maximum with room for a reasoning pass. Set OPENROUTER_MAXTOKENS=none to remove.
+            MT_DEFAULT=32000                            # one place: the fallback below reuses it
+            MT="${OPENROUTER_MAXTOKENS:-$MT_DEFAULT}"
             MT="${MT//[[:space:]]/}"
             case "$MT" in none|off|any) MT="" ;; esac
             # Digits only AND >= 1. max_tokens:0 is accepted by the API but returns an empty
@@ -380,7 +386,7 @@ jobs:
             if [ -n "$MT" ]; then
               case "$MT" in *[!0-9]*) MT="" ;; esac
               if [ -z "$MT" ] || [ "$MT" -lt 1 ]; then
-                echo "Invalid OPENROUTER_MAXTOKENS='${OPENROUTER_MAXTOKENS}'; using 10000."; MT=10000
+                echo "Invalid OPENROUTER_MAXTOKENS='${OPENROUTER_MAXTOKENS}'; using ${MT_DEFAULT}."; MT=$MT_DEFAULT
               fi
               # Force base 10 and strip leading zeros: "0500" is not a valid JSON number, so
               # passing it through to --argjson would rely on jq being lenient about it.

@@ -67,13 +67,13 @@ check 'allow-list and deny-list coexist'    '[.provider.only,.provider.ignore]' 
 # --- Output ceiling ------------------------------------------------------------------------------
 # Latency is ~output_tokens/host_throughput, so this is the guard against timeouts. A malformed
 # value must fall back to the default, never fail open (no cap).
-check 'max_tokens defaults to 10000'   '.max_tokens' '10000'
+check 'max_tokens defaults to 32000'   '.max_tokens' '32000'
 check 'explicit value honoured'        '.max_tokens' '500'   OPENROUTER_MAXTOKENS=500
 check 'whitespace tolerated'           '.max_tokens' '8000'  OPENROUTER_MAXTOKENS=' 8000 '
 check 'none removes the cap'           '.max_tokens' 'null'  OPENROUTER_MAXTOKENS=none
-check 'zero rejected (empty response)' '.max_tokens' '10000' OPENROUTER_MAXTOKENS=0
-check 'negative rejected'              '.max_tokens' '10000' OPENROUTER_MAXTOKENS=-5
-check 'non-numeric rejected'           '.max_tokens' '10000' OPENROUTER_MAXTOKENS=12k
+check 'zero rejected (empty response)' '.max_tokens' '32000' OPENROUTER_MAXTOKENS=0
+check 'negative rejected'              '.max_tokens' '32000' OPENROUTER_MAXTOKENS=-5
+check 'non-numeric rejected'           '.max_tokens' '32000' OPENROUTER_MAXTOKENS=12k
 check 'leading zeros normalised to base 10' '.max_tokens' '500'   OPENROUTER_MAXTOKENS=0500
 
 # --- Price ceiling --------------------------------------------------------------------------------
