@@ -2,6 +2,19 @@
 
 All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest non-breaking release.
 
+Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
+`.github/workflows/review.yml` is the record of record for that gap.
+
+## v1.4.6 (pending)
+
+### Changed
+- **`setup.ps1 -Reviewers` now defaults to `"default"`**, which *deletes* the repo's `REVIEWERS`
+  variable so it inherits `review.yml`'s panel, instead of pinning it to `'gemini'` (the old
+  default). **Re-running `setup.ps1` on an already-onboarded repo with no `-Reviewers` flag will
+  remove its existing `REVIEWERS` pin** and upgrade it to the full default panel, which may include
+  paid OpenRouter models. Pass an explicit `-Reviewers` value to keep a repo pinned. The script now
+  prints a notice at the point of removal so this isn't silent.
+
 ## v1.1.0
 
 ### Added
