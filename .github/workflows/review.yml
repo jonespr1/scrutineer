@@ -309,7 +309,7 @@ jobs:
               if   [ "$rc" = 28 ];           then why="Gemini did not respond within ${timeout}s (the diff may be too large; try gemini-flash-latest or a smaller PR)"
               elif [ "$rc" != 0 ];           then why="could not reach the Gemini API (curl exit $rc)"
               elif [ -n "$err" ];            then why="Gemini API error${http:+ (HTTP $http)}: $err"
-              elif [ "$fr" = "MAX_TOKENS" ]; then why="the model hit its output limit before finishing the review (finishReason=MAX_TOKENS)"
+              elif [ "$fr" = "MAX_TOKENS" ]; then why="the model hit its output limit before finishing the review (finishReason=MAX_TOKENS); Gemini has no equivalent of OPENROUTER_MAXTOKENS - reduce the diff size or CONTEXT_BUDGET"
               elif [ -n "$fr" ];             then why="no review returned (finishReason=$fr - e.g. a SAFETY or RECITATION block)"
               elif [ -n "$http" ] && [ "$http" != 200 ]; then why="HTTP $http from the Gemini API"
               else                                why="empty response from the Gemini API (HTTP ${http:-unknown})"
@@ -382,6 +382,9 @@ jobs:
               if [ -z "$MT" ] || [ "$MT" -lt 1 ]; then
                 echo "Invalid OPENROUTER_MAXTOKENS='${OPENROUTER_MAXTOKENS}'; using 10000."; MT=10000
               fi
+              # Force base 10 and strip leading zeros: "0500" is not a valid JSON number, so
+              # passing it through to --argjson would rely on jq being lenient about it.
+              MT=$((10#$MT))
             fi
             # Build the request and send it via stdin, never argv (see call_gemini): the prompt is far
             # larger than the OS single-argument limit once file context is included.
@@ -399,7 +402,7 @@ jobs:
               if   [ "$rc" = 28 ];         then why="the model did not respond within ${timeout}s (raise OPENROUTER_MAXPRICE to allow faster hosts, or reduce the diff size / CONTEXT_BUDGET)"
               elif [ "$rc" != 0 ];         then why="could not reach OpenRouter (curl exit $rc)"
               elif [ -n "$err" ];          then why="OpenRouter error${http:+ (HTTP $http)}: $err"
-              elif [ "$fr" = "length" ];   then why="the model hit its output limit before finishing the review (finish_reason=length)"
+              elif [ "$fr" = "length" ];   then why="the model hit its output limit before finishing the review (finish_reason=length) - raise OPENROUTER_MAXTOKENS (currently ${MT:-none})"
               elif [ -n "$fr" ];           then why="no review content returned (finish_reason=$fr, HTTP ${http:-unknown})"
               elif [ -n "$http" ] && [ "$http" != 200 ]; then why="HTTP $http from OpenRouter"
               else                              why="empty response from OpenRouter (HTTP ${http:-unknown}) - likely no host matched the current routing constraints (OPENROUTER_HOSTS / OPENROUTER_ZDR / OPENROUTER_MAXPRICE)"
