@@ -372,8 +372,16 @@ jobs:
             MT="${OPENROUTER_MAXTOKENS:-10000}"
             MT="${MT//[[:space:]]/}"
             case "$MT" in none|off|any) MT="" ;; esac
+            # Digits only AND >= 1. max_tokens:0 is accepted by the API but returns an empty
+            # completion, which would surface as the generic "no review content returned" error
+            # instead of naming the misconfiguration - so treat it as malformed and fall back to
+            # the default rather than failing open. ($MT is non-empty here, so the '' branch the
+            # digit test would otherwise need is unreachable and omitted.)
             if [ -n "$MT" ]; then
-              case "$MT" in ''|*[!0-9]*) echo "Malformed OPENROUTER_MAXTOKENS='${OPENROUTER_MAXTOKENS}'; using 10000."; MT=10000 ;; esac
+              case "$MT" in *[!0-9]*) MT="" ;; esac
+              if [ -z "$MT" ] || [ "$MT" -lt 1 ]; then
+                echo "Invalid OPENROUTER_MAXTOKENS='${OPENROUTER_MAXTOKENS}'; using 10000."; MT=10000
+              fi
             fi
             # Build the request and send it via stdin, never argv (see call_gemini): the prompt is far
             # larger than the OS single-argument limit once file context is included.
