@@ -20,13 +20,20 @@
 #   GEMINI_MODEL    Model for a bare "gemini" slot (default: gemini-flash-latest).
 #
 # OpenRouter routing controls (apply to every OpenRouter slot) - repo Variables:
-#   OPENROUTER_HOSTS     Allow-list of host slugs. Default: "novita,fireworks,together,gmicloud"
-#                        (non-Chinese, fp8) - the only way to guarantee jurisdiction/quality for
-#                        open-weight models. With OPENROUTER_SORT (throughput by default) routing picks
-#                        the fastest allowed host under OPENROUTER_MAXPRICE. Override per repo, pin one, or
-#                        set to "any" to route to all hosts (e.g. for closed models like google/*).
+#   OPENROUTER_HOSTS     Strict allow-list of host slugs. Default: EMPTY (no allow-list). Privacy is
+#                        enforced by data_collection:deny + OPENROUTER_ZDR, which are request
+#                        properties rather than a list that goes stale. Set this only when data
+#                        RESIDENCY must be bounded to named providers - the one thing a deny-list
+#                        cannot express. A stale allow-list silently excludes better hosts and can
+#                        name hosts that no longer serve the model at all.
+#   OPENROUTER_IGNORE    Deny-list of host slugs to avoid, e.g. "deepinfra,venice". Prefer this over
+#                        an allow-list: it stays correct as providers are added, and entries are only
+#                        added in response to measured bad throughput/uptime.
+#   OPENROUTER_MAXTOKENS Output ceiling per review. Default 10000; "none" to disable. Latency is
+#                        ~output_tokens/host_throughput, so this bounds the term that causes timeouts.
+#                        A review that hits the ceiling is still posted, truncated.
 #   OPENROUTER_SORT      throughput (default) | price | latency
-#   OPENROUTER_MAXPRICE  hard $/1M ceiling "in,out" (a single value = both). Default "2,6" (fastest host
+#   OPENROUTER_MAXPRICE  hard $/1M ceiling "in,out" (a single value = both). Default "3,10" (fastest host
 #                        under it). Premium models (anthropic/*, openai/*) exceed it - set "none" for those.
 #   OPENROUTER_ZDR       zero-data-retention hosts only. Default: true. Set "false" to allow
 #                        non-ZDR hosts (needed for models that have no ZDR host on OpenRouter).
@@ -58,8 +65,9 @@ jobs:
   review:
     runs-on: 'ubuntu-latest'
     # Reviewers run in parallel, so wall-clock is the slowest single model call (per-call
-    # ceilings are 300s OpenRouter / 240s Gemini) plus checkout - ~6 min worst case.
-    timeout-minutes: 8
+    # ceilings are 420s OpenRouter / 240s Gemini) plus checkout - ~8 min worst case. The job
+    # ceiling must stay comfortably above the per-call one or it, not curl, becomes the limit.
+    timeout-minutes: 12
     # NO permissions block here - deliberately. A called workflow's permissions may not EXCEED the
     # calling job's, and a caller that grants less than we request fails at startup (no steps run,
     # just "startup_failure"). Declaring a set here would therefore break every existing caller the
@@ -85,6 +93,8 @@ jobs:
           OPENROUTER_HOSTS: '${{ vars.OPENROUTER_HOSTS }}'
           OPENROUTER_SORT: '${{ vars.OPENROUTER_SORT }}'
           OPENROUTER_MAXPRICE: '${{ vars.OPENROUTER_MAXPRICE }}'
+          OPENROUTER_IGNORE: '${{ vars.OPENROUTER_IGNORE }}'
+          OPENROUTER_MAXTOKENS: '${{ vars.OPENROUTER_MAXTOKENS }}'
           OPENROUTER_ZDR: '${{ vars.OPENROUTER_ZDR }}'
           CONTEXT_BUDGET: '${{ vars.CONTEXT_BUDGET }}'
           REPO: '${{ github.repository }}'
@@ -316,32 +326,61 @@ jobs:
             printf '%s' "$text"
           }
           call_openrouter() {
-            local model="$1" req resp text err base prov sort http rc fr why pt ct cost host timeout=300 HOSTS MP mp_re
+            local model="$1" req resp text err base prov sort http rc fr why pt ct cost host timeout=420 HOSTS IGN MP mp_re MT
             if [ -z "${OPENROUTER_API_KEY:-}" ]; then printf '⚠️ OPENROUTER_API_KEY is not set for this repo.'; return; fi
             sort="${OPENROUTER_SORT:-throughput}"
             base="$(jq -n --arg s "$sort" '{data_collection:"deny", sort:$s, allow_fallbacks:true}')"
-            HOSTS="${OPENROUTER_HOSTS:-novita,fireworks,together,gmicloud}"  # compliant (non-Chinese, fp8) default; throughput-sort picks the fastest allowed host under MAXPRICE
-            case "$HOSTS" in any|all|'*') HOSTS="" ;; esac  # opt out of the allow-list (e.g. closed models like google/* routed via OpenRouter). NB: the env block always sets this var, so ':-' (not '-') + this keyword is how a repo disables the default.
+            # No allow-list by DEFAULT. A hand-maintained "only" list silently rots: it cannot know
+            # when a provider stops serving a model (our old default named a host that does not serve
+            # minimax-m3 at all) and it excludes every provider added after it was written, including
+            # better ones. Privacy is enforced by data_collection:deny + zdr below, which are properties
+            # of the request rather than a list someone has to remember to update.
+            # Set OPENROUTER_HOSTS to re-impose a strict allow-list where data RESIDENCY must be bounded
+            # to named providers - that is the one guarantee a deny-list cannot give you.
+            HOSTS="${OPENROUTER_HOSTS:-}"
+            case "$HOSTS" in any|all|'*') HOSTS="" ;; esac
             [ -n "$HOSTS" ] && base="$(printf '%s' "$base" | jq --arg l "$HOSTS" '. + {only:($l|split(",")|map(gsub("^ +| +$";"")))}')"
+            # Deny-list for hosts we have measured as bad for our workload (low throughput or poor
+            # uptime). Unlike an allow-list this stays correct as the ecosystem grows: new providers
+            # are usable immediately, and we only ever add an entry in response to evidence.
+            IGN="${OPENROUTER_IGNORE:-}"
+            [ -n "$IGN" ] && base="$(printf '%s' "$base" | jq --arg l "$IGN" '. + {ignore:($l|split(",")|map(gsub("^ +| +$";"")))}')"
             # Zero data retention is ON by default; set OPENROUTER_ZDR=false to allow non-ZDR hosts.
             [ "${OPENROUTER_ZDR:-true}" != "false" ] && base="$(printf '%s' "$base" | jq '. + {zdr:true}')"
             # $/1M ceiling "in,out": with throughput sort this stops routing to a premium (fast but dear)
-            # host. Default "2,6" (headroom over our models' ~$1.3/1M); set OPENROUTER_MAXPRICE=none to disable.
-            MP="${OPENROUTER_MAXPRICE:-2,6}"
+            # host. Default "3,10". NOT arbitrary: at the old "2,6" we measured GLM's fast host at
+            # ~$2.30/1M input being excluded by 30c, which pushed reviews onto hosts slow enough to blow
+            # the timeout - the ceiling was costing us the reviewer to save pennies. Set "none" to disable.
+            MP="${OPENROUTER_MAXPRICE:-3,10}"
             MP="${MP//[[:space:]]/}"                    # tolerate "2, 6" / " 2.5 "
             case "$MP" in none|off|any) MP="" ;; esac   # explicit opt-out -> no ceiling
             # A malformed value (letters, ".", "2.", stray commas) falls back to the safe default rather
             # than failing OPEN (no ceiling) - a typo must not silently remove the cost guard.
             mp_re='^[0-9]+(\.[0-9]+)?(,[0-9]+(\.[0-9]+)?)?$'
             if [ -n "$MP" ] && ! [[ "$MP" =~ $mp_re ]]; then
-              echo "Malformed OPENROUTER_MAXPRICE='${OPENROUTER_MAXPRICE}'; using default 2,6."; MP="2,6"
+              echo "Malformed OPENROUTER_MAXPRICE='${OPENROUTER_MAXPRICE}'; using default 3,10."; MP="3,10"
             fi
             # A single value applies to both in and out (.[1]//.[0]).
             [ -n "$MP" ] && base="$(printf '%s' "$base" | jq --arg m "$MP" '. + ($m|split(",")|{max_price:{prompt:(.[0]|tonumber), completion:((.[1]//.[0])|tonumber)}})')"
             prov="$base"
+            # Output ceiling. Latency here is essentially output_tokens / host_throughput - a reviewer
+            # that decides to emit 16k tokens at ~45 tps needs ~350s and blows the timeout, which is
+            # what every OpenRouter timeout we have seen actually was. This bounds the ONLY unbounded
+            # term; it does not limit how much we send, and a review that hits the ceiling is still
+            # posted (truncated) rather than discarded, because we use the content whenever it is
+            # non-empty. Set OPENROUTER_MAXTOKENS=none to remove the cap.
+            MT="${OPENROUTER_MAXTOKENS:-10000}"
+            MT="${MT//[[:space:]]/}"
+            case "$MT" in none|off|any) MT="" ;; esac
+            if [ -n "$MT" ]; then
+              case "$MT" in ''|*[!0-9]*) echo "Malformed OPENROUTER_MAXTOKENS='${OPENROUTER_MAXTOKENS}'; using 10000."; MT=10000 ;; esac
+            fi
             # Build the request and send it via stdin, never argv (see call_gemini): the prompt is far
             # larger than the OS single-argument limit once file context is included.
-            req="$(printf '%s' "$PROMPT" | jq -Rsc --arg m "$model" --argjson prov "$prov" '{model:$m, messages:[{role:"user",content:.}], provider:$prov, usage:{include:true}}')"
+            req="$(printf '%s' "$PROMPT" | jq -Rsc --arg m "$model" --argjson prov "$prov" \
+                     --argjson mt "${MT:-null}" \
+                     '{model:$m, messages:[{role:"user",content:.}], provider:$prov, usage:{include:true}}
+                      + (if $mt == null then {} else {max_tokens:$mt} end)')"
             rc=0; resp="$(printf '%s' "$req" | curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://openrouter.ai/api/v1/chat/completions" -H "Authorization: Bearer ${OPENROUTER_API_KEY}" -H 'Content-Type: application/json' -H 'HTTP-Referer: https://github.com' -H 'X-Title: Scrutineer' --data-binary @-)" || rc=$?
             http=""; case "$resp" in *__HTTP__*) http="${resp##*__HTTP__}"; resp="${resp%__HTTP__*}"; resp="${resp%$'\n'}";; esac
             text="$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null)"
