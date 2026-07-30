@@ -17,14 +17,16 @@ jobs:
   review:
     # Run on PR open/reopen - but skip bot-authored PRs (e.g. Dependabot); a full AI review of a
     # routine dependency bump rarely earns its cost, and you can still review one on demand with
-    # "@review". Also runs when a trusted user comments "@review". The author_association check
+    # "@review". Also runs when a trusted user comments "@review" -- the comment must START with it,
+    # not merely contain it, or any discussion that mentions "@review" in prose fires a paid review
+    # round. The author_association check
     # stops strangers from triggering reviews (and spending your API credits / runner minutes) on
     # public repos. To review bot PRs automatically too, drop the `user.type != 'Bot'` clause.
     if: >-
       (github.event_name == 'pull_request' &&
        github.event.pull_request.user.type != 'Bot') ||
       (github.event.issue.pull_request != null &&
-       contains(github.event.comment.body, '@review') &&
+       startsWith(github.event.comment.body, '@review') &&
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     # The reusable workflow inherits exactly these grants. 'checks: read' powers CI-aware
     # severity calibration; it is optional (reviews run fine without it).
