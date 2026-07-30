@@ -198,11 +198,15 @@ jobs:
           [ -f .review/styleguide.md ] && STYLE="$(cat .review/styleguide.md)"
 
           # 3) Prior conversation (our reviews + human replies) for context-aware re-reviews.
+          # `// ""` on every .body read: jq errors on null (the API can return one), and because
+          # the failure is swallowed below a single null comment would silently empty HISTORY -
+          # losing the reviewer all prior conversation on exactly the re-review that needs it.
           HISTORY="$(printf '%s' "$COMMENTS_JSON" | jq -r '
-              map(select((.body | startswith("## 🤖 Review")) or (.user.type == "User")))
-              | map(if (.body | startswith("## 🤖 Review"))
-                    then "### Your previous review:\n" + .body
-                    else "### Developer response (" + .user.login + "):\n" + .body end)
+              def body: .body // "";
+              map(select((body | startswith("## 🤖 Review")) or (.user.type == "User")))
+              | map(if (body | startswith("## 🤖 Review"))
+                    then "### Your previous review:\n" + body
+                    else "### Developer response (" + (.user.login // "unknown") + "):\n" + body end)
               | join("\n\n---\n\n")' 2>/dev/null || true)"
           if [ "${#HISTORY}" -gt 20000 ]; then HISTORY="${HISTORY: -20000}"; fi
 
@@ -494,7 +498,9 @@ jobs:
             msg="${msg} Repo Settings → Secrets and variables → Actions → Secrets. See the Scrutineer README."
             # Post once: skip if we've already said it on this PR, so repeated @review while the keys
             # are still being configured doesn't spam identical notices.
-            if printf '%s' "$COMMENTS_JSON" | jq -e 'map(select(.user.type=="Bot" and (.body|contains("no API key is configured"))))|length > 0' >/dev/null 2>&1; then
+            # `.body // ""` again: a null body would abort the filter, jq -e would exit non-zero,
+            # and the "already posted?" test would fall through to posting a duplicate notice.
+            if printf '%s' "$COMMENTS_JSON" | jq -e 'map(select(.user.type=="Bot" and ((.body // "")|contains("no API key is configured"))))|length > 0' >/dev/null 2>&1; then
               echo "No runnable slot (missing keys); config notice already present - skipping."
             else
               printf '%s' "$msg" | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file - || true

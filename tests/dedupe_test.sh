@@ -11,6 +11,10 @@ set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WF="$HERE/../.github/workflows/review.yml"
 
+# The range ends at the first line that is exactly 10 spaces + "}". If a future refactor puts
+# another such line INSIDE the function, the extract truncates - and the guards below turn that
+# into a loud "bad extraction" error rather than a silent wrong answer. That is the intended
+# behaviour: don't "fix" it by loosening the guards.
 SRC="$(awk '/^          already_reviewed\(\) \{$/,/^          \}$/' "$WF" | sed 's/^          //')"
 # Validate the extraction itself, so a broken extract reports as a broken extract rather than
 # as ten confusing assertion failures. These check that we got a WHOLE, parseable function -
