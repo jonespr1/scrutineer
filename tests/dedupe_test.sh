@@ -12,12 +12,15 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WF="$HERE/../.github/workflows/review.yml"
 
 SRC="$(awk '/^          already_reviewed\(\) \{$/,/^          \}$/' "$WF" | sed 's/^          //')"
-# Guard only that extraction worked at all - deliberately NOT a check for any particular
-# implementation detail, so the assertions below are what actually judge the behaviour.
-if ! printf '%s' "$SRC" | grep -q 'COMMENTS_JSON'; then
-  echo "FAIL: could not extract already_reviewed() from $WF (has the indentation changed?)" >&2
-  exit 1
-fi
+# Validate the extraction itself, so a broken extract reports as a broken extract rather than
+# as ten confusing assertion failures. These check that we got a WHOLE, parseable function -
+# deliberately not that it is implemented any particular way, so the assertions below remain
+# what actually judges the behaviour.
+extract_failed() { echo "FAIL: bad extraction of already_reviewed() from $WF - $1" >&2; exit 1; }
+[ -n "$SRC" ]                                      || extract_failed "nothing matched (indentation changed?)"
+printf '%s' "$SRC" | grep -q 'COMMENTS_JSON'       || extract_failed "no COMMENTS_JSON reference"
+[ "$(printf '%s' "$SRC" | tail -n1)" = '}' ]       || extract_failed "does not end at the closing brace (truncated?)"
+printf '%s\n' "$SRC" | bash -n 2>/dev/null         || extract_failed "extracted text is not valid bash (truncated?)"
 eval "$SRC"
 
 SHA='8a67d205983c6e8a4e82e47911c6b88af859c2fc'
@@ -69,6 +72,14 @@ check 'legacy marker without host= still matches'       yes 'gemini-flash-latest
 check 'label with / and () compared literally, not as regex' yes 'minimax/minimax-m3 (via OpenRouter)' \
       "$(mk "$(printf '%s\n' '## 🤖 Review - `minimax/minimax-m3 (via OpenRouter)`' '' 'Body.' '' \
               "<!-- scrutineer sha=$SHA lat=1s -->")")"
+
+# A null body anywhere in the thread must not abort the filter. jq errors on null for both
+# split and contains, and because the jq failure is swallowed the slot would otherwise
+# re-review on every run.
+check 'null comment body does not break the filter' yes 'gemini-flash-latest' \
+      "$(jq -n --arg g "$GENUINE" '[{user:{type:"Bot"},created_at:"2026-07-30T16:00:00Z",body:null},
+                                    {user:{type:"User"},created_at:"2026-07-30T16:30:00Z",body:null},
+                                    {user:{type:"Bot"},created_at:"2026-07-30T17:00:00Z",body:$g}]')"
 
 # A failed review must NOT count as reviewed, so the slot retries on the next trigger.
 check 'failed review is not treated as reviewed' no 'gemini-flash-latest' \
