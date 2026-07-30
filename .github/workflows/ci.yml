@@ -62,6 +62,8 @@ jobs:
       # preinstalled on ubuntu-latest.
       - name: 'De-dupe (already_reviewed)'
         run: bash tests/dedupe_test.sh
+      - name: 'Routing (call_openrouter request body)'
+        run: bash tests/routing_test.sh
 
   lint:
     name: Lint · actionlint · PSScriptAnalyzer
