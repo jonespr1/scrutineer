@@ -53,7 +53,8 @@ jobs:
       (github.event_name == 'pull_request' &&
        github.event.pull_request.user.type != 'Bot') ||
       (github.event.issue.pull_request != null &&
-       startsWith(github.event.comment.body, '@review') &&
+       (startsWith(github.event.comment.body, '@review') ||
+        contains(github.event.comment.body, format('{0}@review', fromJson('"\n"')))) &&
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     # The reusable workflow inherits exactly these grants. 'checks: read' is optional and only
     # powers CI-aware severity calibration; without it reviews still run.

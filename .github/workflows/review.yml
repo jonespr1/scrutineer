@@ -327,7 +327,7 @@ jobs:
             printf '%s' "$text"
           }
           call_openrouter() {
-            local model="$1" req resp text err base prov sort http rc fr why pt ct cost host timeout=600 HOSTS IGN MP mp_re MT
+            local model="$1" req resp text err base prov sort http rc fr why pt ct cost host timeout=600 HOSTS IGN MP mp_re MT MT_DEFAULT
             if [ -z "${OPENROUTER_API_KEY:-}" ]; then printf '⚠️ OPENROUTER_API_KEY is not set for this repo.'; return; fi
             sort="${OPENROUTER_SORT:-throughput}"
             base="$(jq -n --arg s "$sort" '{data_collection:"deny", sort:$s, allow_fallbacks:true}')"
@@ -374,7 +374,8 @@ jobs:
             # emitted - which returns finish_reason=length with EMPTY content, i.e. billed and useless.
             # That is exactly what 10000 did to minimax-m3 on a large PR. Hence 32000: above the
             # observed maximum with room for a reasoning pass. Set OPENROUTER_MAXTOKENS=none to remove.
-            MT="${OPENROUTER_MAXTOKENS:-32000}"
+            MT_DEFAULT=32000                            # one place: the fallback below reuses it
+            MT="${OPENROUTER_MAXTOKENS:-$MT_DEFAULT}"
             MT="${MT//[[:space:]]/}"
             case "$MT" in none|off|any) MT="" ;; esac
             # Digits only AND >= 1. max_tokens:0 is accepted by the API but returns an empty
@@ -385,7 +386,7 @@ jobs:
             if [ -n "$MT" ]; then
               case "$MT" in *[!0-9]*) MT="" ;; esac
               if [ -z "$MT" ] || [ "$MT" -lt 1 ]; then
-                echo "Invalid OPENROUTER_MAXTOKENS='${OPENROUTER_MAXTOKENS}'; using 32000."; MT=32000
+                echo "Invalid OPENROUTER_MAXTOKENS='${OPENROUTER_MAXTOKENS}'; using ${MT_DEFAULT}."; MT=$MT_DEFAULT
               fi
               # Force base 10 and strip leading zeros: "0500" is not a valid JSON number, so
               # passing it through to --argjson would rely on jq being lenient about it.
