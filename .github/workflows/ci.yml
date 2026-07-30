@@ -64,6 +64,8 @@ jobs:
         run: bash tests/dedupe_test.sh
       - name: 'Routing (call_openrouter request body)'
         run: bash tests/routing_test.sh
+      - name: 'Callers (trigger anchoring + permission grants)'
+        run: bash tests/caller_test.sh
 
   lint:
     name: Lint · actionlint · PSScriptAnalyzer

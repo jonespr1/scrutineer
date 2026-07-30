@@ -15,12 +15,18 @@
 
 .PARAMETER Reviewers
   The REVIEWERS value, e.g. "gemini", "gemini,z-ai/glm-5.2", "google/gemini-2.5-flash,z-ai/glm-5.2".
+  Use "default" (the default) to DELETE the repo's REVIEWERS variable so it inherits the
+  reviewer set defined in review.yml. Prefer that: a pinned variable stops a future change to
+  the default panel from ever reaching the repo - the same trap as a stale host allow-list.
 
 .PARAMETER OpenRouterHosts
   Optional allow-list of host slugs for OpenRouter models (e.g. "novita,fireworks,together,gmicloud").
 
 .EXAMPLE
-  ./setup.ps1 -Repos me/app -Reviewers "gemini"
+  ./setup.ps1 -Repos me/app                      # inherit the default reviewer panel
+
+.EXAMPLE
+  ./setup.ps1 -Repos me/app -Reviewers "gemini"  # pin this repo to one model
 
 .EXAMPLE
   ./setup.ps1 -Repos me/app,me/lib -Reviewers "gemini,z-ai/glm-5.2" -OpenRouterHosts "novita,fireworks,together,gmicloud"
@@ -28,7 +34,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory)][string[]] $Repos,
-  [string] $Reviewers = 'gemini',
+  [string] $Reviewers = 'default',
   [string] $OpenRouterHosts = '',
   [string] $OpenRouterSort = '',
   [string] $OpenRouterMaxPrice = '',
@@ -132,8 +138,16 @@ function Commit-Caller {
 Assert-Prereqs
 
 # Decide which keys are needed from the reviewer spec.
-$needGemini = ($Reviewers -match '(^|,)\s*gemini(\s|:|,|$)')
-$needOpenRouter = ($Reviewers -split ',' | Where-Object { $_.Trim() -and ($_.Trim() -notmatch '^gemini(:|$)') }).Count -gt 0
+# "default" = inherit review.yml's panel. We cannot know from here which providers that panel
+# uses, and it currently spans both, so ask for both keys. A slot whose key is missing is skipped
+# silently at review time, so an unused key costs nothing.
+$inheritReviewers = [string]::IsNullOrWhiteSpace($Reviewers) -or $Reviewers -eq 'default'
+if ($inheritReviewers) {
+  $needGemini = $true; $needOpenRouter = $true
+} else {
+  $needGemini = ($Reviewers -match '(^|,)\s*gemini(\s|:|,|$)')
+  $needOpenRouter = ($Reviewers -split ',' | Where-Object { $_.Trim() -and ($_.Trim() -notmatch '^gemini(:|$)') }).Count -gt 0
+}
 $geminiKey = $null; $orKey = $null
 if ($needGemini)     { $geminiKey = Read-Secret 'Paste your Gemini API key (input hidden)' 'GEMINI_API_KEY' }
 if ($needOpenRouter) { $orKey     = Read-Secret 'Paste your OpenRouter API key (input hidden)' 'OPENROUTER_API_KEY' }
@@ -142,10 +156,11 @@ $callerB64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes(($CallerTe
 
 foreach ($repo in $Repos) {
   $repo = $repo.Trim(); if (-not $repo) { continue }
-  Write-Host "==> Onboarding $repo  [REVIEWERS=$Reviewers]" -ForegroundColor Cyan
+  $revLabel = if ($inheritReviewers) { 'inherit default panel' } else { $Reviewers }
+  Write-Host "==> Onboarding $repo  [REVIEWERS=$revLabel]" -ForegroundColor Cyan
   if ($geminiKey) { $geminiKey | gh secret set GEMINI_API_KEY     --repo $repo *> $null; Write-Host '    GEMINI_API_KEY set' -ForegroundColor Green }
   if ($orKey)     { $orKey     | gh secret set OPENROUTER_API_KEY --repo $repo *> $null; Write-Host '    OPENROUTER_API_KEY set' -ForegroundColor Green }
-  Set-RepoVar $repo 'REVIEWERS' $Reviewers
+  if ($inheritReviewers) { Remove-RepoVar $repo 'REVIEWERS' } else { Set-RepoVar $repo 'REVIEWERS' $Reviewers }
   if ($OpenRouterHosts)    { Set-RepoVar $repo 'OPENROUTER_HOSTS' $OpenRouterHosts }    else { Remove-RepoVar $repo 'OPENROUTER_HOSTS' }
   if ($OpenRouterSort)     { Set-RepoVar $repo 'OPENROUTER_SORT' $OpenRouterSort }      else { Remove-RepoVar $repo 'OPENROUTER_SORT' }
   if ($OpenRouterMaxPrice) { Set-RepoVar $repo 'OPENROUTER_MAXPRICE' $OpenRouterMaxPrice } else { Remove-RepoVar $repo 'OPENROUTER_MAXPRICE' }
