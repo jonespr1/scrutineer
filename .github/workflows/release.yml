@@ -23,6 +23,14 @@ on:
 permissions:
   contents: 'write'   # needed to create/update the major-alias tag ref
 
+# Two tags pushed close together (v1.4.2 then v1.4.3) would otherwise race, both PATCHing
+# refs/tags/v1, and the alias could settle on the OLDER release. Serialise instead: with
+# cancel-in-progress false the running job finishes, and a newer queued run supersedes an
+# older still-pending one - so the last tag pushed is the one the alias ends on.
+concurrency:
+  group: 'release-move-major-alias'
+  cancel-in-progress: false
+
 jobs:
   move-major-alias:
     runs-on: 'ubuntu-latest'
@@ -38,10 +46,18 @@ jobs:
           set -euo pipefail
           major="${TAG%%.*}"                      # v1.5.0 -> v1
           echo "Release $TAG ($SHA) -> moving alias $major"
-          if gh api "repos/${REPO}/git/refs/tags/${major}" >/dev/null 2>&1; then
-            gh api -X PATCH "repos/${REPO}/git/refs/tags/${major}" -f "sha=${SHA}" -F 'force=true' >/dev/null
+          # Update first and create only on a genuine "no such ref". A GET-then-branch would
+          # treat a transient 5xx/rate-limit as "absent" and fall through to a create that then
+          # 422s; here anything other than a missing-ref error fails loudly with the real message.
+          # force=true is required: moving a tag ref is never a fast-forward.
+          err="$(mktemp)"
+          if gh api -X PATCH "repos/${REPO}/git/refs/tags/${major}" \
+               -f "sha=${SHA}" -F 'force=true' >/dev/null 2>"$err"; then
             echo "Moved existing $major -> $SHA"
-          else
-            gh api -X POST "repos/${REPO}/git/refs" -f "ref=refs/tags/${major}" -f "sha=${SHA}" >/dev/null
+          elif grep -qiE 'not found|does not exist' "$err"; then
+            gh api -X POST "repos/${REPO}/git/refs" \
+              -f "ref=refs/tags/${major}" -f "sha=${SHA}" >/dev/null
             echo "Created $major -> $SHA"
+          else
+            echo "Failed to update $major:" >&2; cat "$err" >&2; exit 1
           fi
