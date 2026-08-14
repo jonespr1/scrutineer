@@ -20,6 +20,11 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    # Explicit rather than relying on Dependabot's default of 5: if several
+    # actions get advisories in the same week the cap silently stops new PRs
+    # being opened, and a default that GitHub can change is a bad thing to
+    # discover during an incident.
+    open-pull-requests-limit: 10
     cooldown:
       default-days: 1
     # .github/workflows/scrutineer.yml dogfoods this repo's OWN reviewer at
