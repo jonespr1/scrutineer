@@ -79,7 +79,7 @@ jobs:
     # CI_STATE=none. Never re-add a permissions block here.
     steps:
       - name: 'Checkout (for optional .review/styleguide.md)'
-        uses: 'actions/checkout@v4'
+        uses: 'actions/checkout@v7'
         with:
           persist-credentials: 'false'
 
