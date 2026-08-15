@@ -5,6 +5,21 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.4.7 (pending)
+
+### Fixed
+- **Reasoning models no longer publish their chain-of-thought into your pull requests.** `minimax-m3`
+  emits its working inside `message.content` rather than a separate field, so reviews were being
+  posted with pages of "Let me analyze this carefully..." above the actual findings. A leading
+  `<...think>` block is now stripped. A block that never closes means the response was cut off
+  mid-thought, so there is no review underneath — that is now reported as an output-limit failure
+  instead of posting a wall of reasoning.
+- **A review cut off partway through is no longer posted as though it were complete.** `finish_reason`
+  / `finishReason` was only consulted when the response was *empty*, so a truncated-but-non-empty
+  review looked finished. A reviewer cut off before reaching its Findings section silently lost
+  findings you were billed for. The partial review is still posted — it has value — but now carries
+  an explicit "this was cut off" banner. Fixed on both the OpenRouter and Gemini paths.
+
 ## v1.4.6 (pending)
 
 ### Changed
