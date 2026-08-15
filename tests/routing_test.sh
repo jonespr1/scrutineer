@@ -86,5 +86,58 @@ check 'malformed falls back, not open' '.provider.max_price' '{"prompt":3,"compl
 check 'sort defaults to throughput'    '.provider.sort' '"throughput"'
 check 'sort is overridable'            '.provider.sort' '"price"' OPENROUTER_SORT=price
 
+# --- Response handling: reasoning leakage and truncation -------------------------------------------
+# A different axis from everything above: these assert on what call_openrouter RETURNS for a given
+# response, not on the request it builds. Both behaviours were found in production on scrutineer#23,
+# where minimax-m3 posted its chain-of-thought into the PR and then got cut off mid-sentence while
+# still looking like a finished review.
+respond() { # response_json -> the text call_openrouter returns
+  STUB_BODY="$1" bash -c '
+    PROMPT="review this"; OPENROUTER_API_KEY="test-key"; SLOT_META=""
+    curl() { cat >/dev/null; printf "%s\n__HTTP__200" "$STUB_BODY"; }
+    '"$SRC"'
+    call_openrouter "minimax/minimax-m3" 2>/dev/null
+  ' 2>/dev/null
+}
+has() { # description  response_json  substring_that_must_appear
+  local desc="$1" body="$2" want="$3" got
+  got="$(respond "$body")"
+  case "$got" in *"$want"*) printf 'ok    %s\n' "$desc" ;;
+    *) printf 'FAIL  %s\n        want substring=%s\n        got=%s\n' "$desc" "$want" "$got"; fails=1 ;;
+  esac
+}
+hasnot() { # description  response_json  substring_that_must_NOT_appear
+  local desc="$1" body="$2" bad="$3" got
+  got="$(respond "$body")"
+  case "$got" in *"$bad"*) printf 'FAIL  %s\n        unwanted substring=%s\n        got=%s\n' "$desc" "$bad" "$got"; fails=1 ;;
+    *) printf 'ok    %s\n' "$desc" ;;
+  esac
+}
+
+THINK='{"choices":[{"finish_reason":"stop","message":{"content":"<mm:think>Let me analyze this carefully. Hmm.</mm:think>## Summary\nthe real review"}}]}'
+has    'leading think block: review survives'      "$THINK" 'the real review'
+hasnot 'leading think block: reasoning stripped'   "$THINK" 'Let me analyze'
+
+# Cut off mid-thought: there is no review under the reasoning, so posting the reasoning would be
+# worse than reporting the failure.
+UNCLOSED='{"choices":[{"finish_reason":"length","message":{"content":"<mm:think>Let me analyze this carefully and at great"}}]}'
+has    'unclosed think block: reports the limit'   "$UNCLOSED" 'finish_reason=length'
+hasnot 'unclosed think block: no reasoning posted' "$UNCLOSED" 'Let me analyze'
+
+# A review that merely QUOTES a think tag (e.g. one reviewing this very code) must be left alone -
+# stripping to the last closing tag unconditionally would eat the review above it.
+QUOTED='{"choices":[{"finish_reason":"stop","message":{"content":"## Summary\nStrip `<mm:think>` blocks like </mm:think> here.\nkeep this line"}}]}'
+has    'quoted think tag mid-body is not stripped' "$QUOTED" 'keep this line'
+has    'quoted think tag keeps preceding text'     "$QUOTED" '## Summary'
+
+# Truncated but non-empty: the partial review is kept AND flagged. Before this, finish_reason was
+# only consulted when content was empty, so this posted looking complete.
+CUT='{"choices":[{"finish_reason":"length","message":{"content":"## Findings\nfound one bug so f"}}]}'
+has    'truncated review is kept'                  "$CUT" 'found one bug so f'
+has    'truncated review is flagged'               "$CUT" 'cut off before it finished'
+
+WHOLE='{"choices":[{"finish_reason":"stop","message":{"content":"## Findings\nall good"}}]}'
+hasnot 'complete review gets no cut-off banner'    "$WHOLE" 'cut off before it finished'
+
 [ "$fails" -eq 0 ] && echo "All routing tests passed." || echo "Some routing tests FAILED." >&2
 exit "$fails"

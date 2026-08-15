@@ -303,10 +303,12 @@ jobs:
             rc=0; resp="$(printf '%s' "$req" | curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}" -H 'Content-Type: application/json' --data-binary @-)" || rc=$?
             http=""; case "$resp" in *__HTTP__*) http="${resp##*__HTTP__}"; resp="${resp%__HTTP__*}"; resp="${resp%$'\n'}";; esac
             text="$(printf '%s' "$resp" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null)"
+            # Hoisted out of the empty-content branch below: the truncation check needs it even when
+            # content IS present, which is the whole point of the MAX_TOKENS branch at the end.
+            fr="$(printf '%s' "$resp" | jq -r '.candidates[0].finishReason // .promptFeedback.blockReason // empty' 2>/dev/null)"
             if [ -z "$text" ]; then
               # Report the actual cause, never a bare "no response".
               err="$(printf '%s' "$resp" | jq -r '.error.message // empty' 2>/dev/null)"
-              fr="$(printf '%s' "$resp" | jq -r '.candidates[0].finishReason // .promptFeedback.blockReason // empty' 2>/dev/null)"
               if   [ "$rc" = 28 ];           then why="Gemini did not respond within ${timeout}s (the diff may be too large; try gemini-flash-latest or a smaller PR)"
               elif [ "$rc" != 0 ];           then why="could not reach the Gemini API (curl exit $rc)"
               elif [ -n "$err" ];            then why="Gemini API error${http:+ (HTTP $http)}: $err"
@@ -316,6 +318,11 @@ jobs:
               else                                why="empty response from the Gemini API (HTTP ${http:-unknown})"
               fi
               text="$(printf '⚠️ Could not generate review.\n\n```\n%s\n```' "$why")"
+            elif [ "$fr" = "MAX_TOKENS" ]; then
+              # Same defect as the OpenRouter path: finishReason was only consulted when content was
+              # empty, so a Gemini review truncated partway through posted as if complete. Gemini has
+              # no OPENROUTER_MAXTOKENS equivalent, so the remedy is diff size rather than a limit.
+              text="$(printf '%s\n\n---\n\n⚠️ **This review was cut off before it finished** (`finishReason=MAX_TOKENS`). Anything past the cut is missing, including findings it had not reached - do not read the absence of a finding as a pass. Reduce the diff size or `CONTEXT_BUDGET` and re-run.' "$text")"
             fi
             # Telemetry -> temp file the caller reads (functions run in a subshell, so globals won't
             # propagate). Gemini has no USD in its response, so cost is left "na" (estimate from tokens).
@@ -401,10 +408,30 @@ jobs:
             rc=0; resp="$(printf '%s' "$req" | curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://openrouter.ai/api/v1/chat/completions" -H "Authorization: Bearer ${OPENROUTER_API_KEY}" -H 'Content-Type: application/json' -H 'HTTP-Referer: https://github.com' -H 'X-Title: Scrutineer' --data-binary @-)" || rc=$?
             http=""; case "$resp" in *__HTTP__*) http="${resp##*__HTTP__}"; resp="${resp%__HTTP__*}"; resp="${resp%$'\n'}";; esac
             text="$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null)"
+            fr="$(printf '%s' "$resp" | jq -r '.choices[0].finish_reason // empty' 2>/dev/null)"
+            # Some reasoning models (minimax-m3) emit their chain-of-thought INSIDE message.content
+            # rather than in a separate reasoning field, so the posted review opens with pages of
+            # "Let me analyze this carefully..." before reaching a single finding. That is the
+            # model's private working, not review output, and it also consumes the output budget -
+            # which is how a review ends up truncated mid-sentence.
+            #
+            # Only strip when the content STARTS with the tag, which is the actual failure mode. A
+            # review that merely quotes a think tag mid-body (one reviewing THIS code, say) is left
+            # untouched - stripping "everything up to the last closing tag" unconditionally would
+            # eat the real review above it.
+            if [[ "$text" =~ ^[[:space:]]*\<[A-Za-z0-9_]*:?think\> ]]; then
+              if printf '%s' "$text" | grep -q '</[A-Za-z0-9_:]*think>'; then
+                text="$(printf '%s' "$text" | jq -Rsr 'gsub("(?s)^.*</[A-Za-z0-9_:]*think>\\s*"; "")' 2>/dev/null)"
+              else
+                # Opening tag with no closing tag: cut off mid-thought, so there is no review
+                # underneath to salvage. Emptying it falls through to the reporting below, which
+                # names finish_reason=length rather than posting a wall of reasoning.
+                text=""
+              fi
+            fi
             if [ -z "$text" ]; then
               # Report the actual cause, never a bare "no response".
               err="$(printf '%s' "$resp" | jq -r '.error.message // empty' 2>/dev/null)"
-              fr="$(printf '%s' "$resp" | jq -r '.choices[0].finish_reason // empty' 2>/dev/null)"
               if   [ "$rc" = 28 ];         then why="the model did not respond within ${timeout}s (raise OPENROUTER_MAXPRICE to allow faster hosts, or reduce the diff size / CONTEXT_BUDGET)"
               elif [ "$rc" != 0 ];         then why="could not reach OpenRouter (curl exit $rc)"
               elif [ -n "$err" ];          then why="OpenRouter error${http:+ (HTTP $http)}: $err"
@@ -414,6 +441,12 @@ jobs:
               else                              why="empty response from OpenRouter (HTTP ${http:-unknown}) - likely no host matched the current routing constraints (OPENROUTER_HOSTS / OPENROUTER_ZDR / OPENROUTER_MAXPRICE)"
               fi
               text="$(printf '⚠️ Could not generate review.\n\n```\n%s\n```' "$why")"
+            elif [ "$fr" = "length" ]; then
+              # Truncated but NOT empty. Until this branch existed finish_reason was only consulted
+              # when content was empty, so a review cut off partway through was posted looking
+              # complete - and one cut off before its Findings section silently loses findings you
+              # were billed for. Keep the partial review (it still has value) and say it stopped.
+              text="$(printf '%s\n\n---\n\n⚠️ **This review was cut off before it finished** (`finish_reason=length`, limit %s). Anything past the cut is missing, including findings it had not reached - do not read the absence of a finding as a pass. Re-run with a higher `OPENROUTER_MAXTOKENS`, or a smaller diff / `CONTEXT_BUDGET`.' "$text" "${MT:-none}")"
             fi
             # Telemetry: tokens + OpenRouter's real USD cost (usage.include:true above).
             pt="$(printf '%s' "$resp" | jq -r '.usage.prompt_tokens // 0' 2>/dev/null || echo 0)"

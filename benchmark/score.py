@@ -38,7 +38,25 @@ WEIGHT = {"Critical": 3.0, "High": 2.0, "Medium": 1.5, "Low": 1.0}
 PRICES = {
     "gemini-pro-latest":   (1.25, 10.0),   # estimate — confirm against your Google bill
     "gemini-flash-latest": (0.30, 2.50),   # estimate — confirm against your Google bill
+    # Introductory rate, half the launch price, published as ending 2026-12-31; it steps up to
+    # (1.50, 7.50) after that. A model missing from this table costs "n/a", which silently drops
+    # it from the best-value ranking entirely — so an unpriced entry looks like a scoring quirk
+    # when it is really a missing row here.
+    "gemini-3.7-flash":    (0.75, 3.75),   # estimate — confirm against your Google bill
 }
+
+
+def run_sort_key(run_id):
+    """Chronological sort key for a run directory name.
+
+    Two naming conventions coexist: "20260815T001550Z" from the workflow and "local-20260714-r2"
+    from a manual run.sh. A plain lexicographic sort puts EVERY iso-style id before EVERY local-
+    one (digits sort before letters), so `reversed()` buried the newest run at the bottom of an
+    index headed "Newest run first" - which is exactly what happened to run 20260815T001550Z.
+    Sort on the leading 8 date digits instead, with the raw id as a stable same-day tiebreak.
+    """
+    m = re.search(r"(\d{8})", run_id)
+    return (m.group(1) if m else "", run_id)
 
 
 def cited_lines(text):
@@ -127,6 +145,9 @@ def call_cost(rec):
     if rec.get("total_cost") is not None:
         return float(rec["total_cost"]), False
     spec = rec.get("spec", "")
+    # Keyed off the SPEC, not the manifest id, so a spec edit (e.g. adding a "-latest" suffix)
+    # silently reverts the model to n/a and drops it from the best-value ranking again. Change one,
+    # change the other.
     name = spec.split(":", 1)[1] if spec.startswith("gemini:") else spec
     price = PRICES.get(name)
     if price:
@@ -273,6 +294,7 @@ def main():
     }
     with open(os.path.join(run_dir, "scorecard.json"), "w", encoding="utf-8") as fh:
         json.dump(scorecard, fh, indent=2)
+        fh.write("\n")   # POSIX-style trailing newline; without it every diff ends "\ No newline"
 
     # --- Per-run RESULTS.md -------------------------------------------------------------------
     out = [f"# Benchmark run `{run_id}`", ""]
@@ -293,6 +315,12 @@ def main():
         f"/ Low {WEIGHT['Low']:g}). {'STRICT (line match required). ' if strict else ''}"
         f"{'`Flaky` = bugs found in some but not all trials.' if trials > 1 else ''}",
         "",
+        # A --only run scores a subset. Unqualified, the "best value: X" line below reads as a
+        # verdict over the whole panel when it is only a verdict over the models actually run.
+        *([f"> **Targeted run — {len(scorecard['models'])} of {len(MANIFEST['models'])} manifest "
+           f"models scored** ({', '.join('`%s`' % m['model'] for m in scorecard['models'])}). "
+           f"Rankings below compare only these; this is not a full-panel result.", ""]
+          if len(scorecard.get("models", [])) < len(MANIFEST["models"]) else []),
         "## Per-model",
         "",
         "| Rank | Model | Detection | Bugs (maj) | Missed Crit | Flaky | False+ | Avg latency | Cost/run | Notes |",
@@ -333,8 +361,9 @@ def main():
         fh.write("\n".join(out) + "\n")
 
     # --- Rolled-up index ----------------------------------------------------------------------
-    runs = sorted(d for d in os.listdir(os.path.join(HERE, "results"))
-                  if os.path.isdir(os.path.join(HERE, "results", d)))
+    runs = sorted((d for d in os.listdir(os.path.join(HERE, "results"))
+                   if os.path.isdir(os.path.join(HERE, "results", d))),
+                  key=run_sort_key)
     idx = ["# Scrutineer benchmark — results index", "",
            "Standardised model comparison for Scrutineer. Each run scores every configured model",
            "against the planted-bug fixtures in `benchmark/fixtures/` (ground truth in `manifest.json`).",
