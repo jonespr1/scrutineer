@@ -1,0 +1,55 @@
+# Dependabot for scrutineer itself.
+#
+# There is no package manifest here - the product is PowerShell plus bash
+# embedded in workflow YAML - so `github-actions` is the only ecosystem there is
+# to keep fresh. That is precisely the one that was going unwatched.
+#
+# What this buys: ci.yml SHA-pins its third-party actions (actions/checkout,
+# gitleaks/gitleaks-action). A SHA pin is immune to a tag being re-pointed at
+# malicious code, but it is equally immune to the FIX when an advisory lands -
+# it never moves on its own. Dependabot is what moves it. Without this file
+# those pins sit unattended indefinitely, looking secure while going stale.
+#
+# The one-day cooldown is the supply-chain guard: a compromised release yanked
+# within hours is never proposed. Security advisories still arrive immediately
+# regardless of this schedule (repo Settings -> Dependabot security updates).
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # Explicit rather than relying on Dependabot's default of 5: if several
+    # actions get advisories in the same week the cap silently stops new PRs
+    # being opened, and a default that GitHub can change is a bad thing to
+    # discover during an incident.
+    open-pull-requests-limit: 10
+    cooldown:
+      default-days: 1
+    # .github/workflows/scrutineer.yml dogfoods this repo's OWN reviewer at
+    # jonespr1/scrutineer/.github/workflows/review.yml@v1 - the same moving tag
+    # every consumer pins, retagged on each release. Dependabot cannot express
+    # "track a moving tag": it reads "@v1" as version 1, spots a higher point
+    # release and proposes pinning to it. Taking that here would freeze the repo
+    # that DEFINES the pattern onto a stale copy of itself, and would do it
+    # silently - nothing fails, the dogfood caller just stops exercising what
+    # actually ships. Adding Dependabot without this entry would have recreated
+    # the exact bug this rule exists to prevent, in the worst possible place.
+    #
+    # Same rule now carried by every consumer repo and by the stour-standards
+    # consumer template (stour-standards#38), so new repos inherit it.
+    #
+    # It suppresses EVERY update for the dependency, majors included: an ignore
+    # with only `dependency-name` is not version-scoped. Deliberate - Dependabot
+    # proposes the RESOLVED version, never the moving alias (it offered @v1.4.4
+    # for @v1 across the estate, so on a v2 it would offer @v2.0.0), so even a
+    # major PR would pin the ref. No Dependabot PR shape can preserve a moving
+    # tag; a v1 -> v2 migration is a deliberate human edit of the `uses:` line.
+    #
+    # The trailing `*` is load-bearing: for a reusable workflow the dependency
+    # name is the FULL path, not the repo slug - the estate PRs were titled
+    # "Bump jonespr1/scrutineer/.github/workflows/review.yml". A bare
+    # "jonespr1/scrutineer" would match nothing.
+    ignore:
+      - dependency-name: "jonespr1/scrutineer*"
