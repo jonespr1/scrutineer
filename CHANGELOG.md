@@ -5,6 +5,16 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.4.8 (pending)
+
+### Added
+- **`GEMINI_THINKING`** — an optional reasoning budget for Gemini slots, in tokens (`-1` lets the
+  model decide). **Unset by default**, so nothing changes and nothing extra is billed unless you opt
+  in. Until now Scrutineer sent no reasoning configuration to Gemini at all, so every Gemini review
+  ever run used the model's default effort — worth knowing when comparing against a published score
+  for a *"(high)"* configuration of the same model, which is a different thing being measured.
+  Malformed values warn and fall back to off rather than failing the review.
+
 ## v1.4.7 (pending)
 
 ### Fixed

@@ -18,6 +18,11 @@
 #                     REVIEWERS = gemini, z-ai/glm-5.2
 #                     REVIEWERS = google/gemini-2.5-flash, z-ai/glm-5.2
 #   GEMINI_MODEL    Model for a bare "gemini" slot (default: gemini-flash-latest).
+#   GEMINI_THINKING Reasoning budget for Gemini slots, in tokens; -1 lets the model decide.
+#                   UNSET BY DEFAULT, so Gemini runs at whatever effort the model defaults to and
+#                   nothing is billed for thinking. Set it only if you have measured that it earns
+#                   its cost on your diffs - published scores for a "(high)" configuration of a
+#                   model are not evidence about the default one. "off"/"none" also disables.
 #
 # OpenRouter routing controls (apply to every OpenRouter slot) - repo Variables:
 #   OPENROUTER_HOSTS     Strict allow-list of host slugs. Default: EMPTY (no allow-list). Privacy is
@@ -91,6 +96,7 @@ jobs:
           OPENROUTER_API_KEY: '${{ secrets.OPENROUTER_API_KEY }}'
           REVIEWERS: '${{ vars.REVIEWERS }}'
           GEMINI_MODEL: '${{ vars.GEMINI_MODEL }}'
+          GEMINI_THINKING: '${{ vars.GEMINI_THINKING }}'
           OPENROUTER_HOSTS: '${{ vars.OPENROUTER_HOSTS }}'
           OPENROUTER_SORT: '${{ vars.OPENROUTER_SORT }}'
           OPENROUTER_MAXPRICE: '${{ vars.OPENROUTER_MAXPRICE }}'
@@ -299,7 +305,26 @@ jobs:
             if [ -z "${GEMINI_API_KEY:-}" ]; then printf '⚠️ GEMINI_API_KEY is not set for this repo.'; return; fi
             # Build the request and send it via stdin, never argv: PROMPT can be hundreds of KB, which
             # would blow the OS single-argument limit (~128KB) if passed to jq --arg or curl -d.
-            req="$(printf '%s' "$PROMPT" | jq -Rsc '{contents:[{parts:[{text:.}]}]}')"
+            # Reasoning effort, OFF unless GEMINI_THINKING is set - deliberately opt-in. Every repo
+            # in the estate inherits this workflow; thinking tokens are BILLED, and a field this API
+            # version did not recognise would 400 every Gemini review at once. Opt-in keeps both the
+            # cost and the blast radius with whoever turns it on.
+            #
+            # Value is a thinkingBudget in tokens; -1 asks the model to decide (dynamic). Scrutineer
+            # sent no reasoning config at all before this, so every Gemini review ran at whatever the
+            # model defaults to - which is worth knowing when comparing against a published score for
+            # a "(high)" reasoning configuration of the same model.
+            gt="${GEMINI_THINKING:-}"; gt="${gt//[[:space:]]/}"
+            case "$gt" in off|none|any) gt="" ;; esac
+            if [ -n "$gt" ]; then
+              case "${gt#-}" in
+                ''|*[!0-9]*) echo "Ignoring malformed GEMINI_THINKING='${GEMINI_THINKING}' (want an integer thinkingBudget, or -1 for dynamic)."; gt="" ;;
+              esac
+            fi
+            req="$(printf '%s' "$PROMPT" | jq -Rsc --arg gt "$gt" '
+              {contents:[{parts:[{text:.}]}]}
+              + (if $gt == "" then {}
+                 else {generationConfig:{thinkingConfig:{thinkingBudget:($gt|tonumber)}}} end)')"
             rc=0; resp="$(printf '%s' "$req" | curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}" -H 'Content-Type: application/json' --data-binary @-)" || rc=$?
             http=""; case "$resp" in *__HTTP__*) http="${resp##*__HTTP__}"; resp="${resp%__HTTP__*}"; resp="${resp%$'\n'}";; esac
             text="$(printf '%s' "$resp" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null)"

@@ -68,6 +68,10 @@ FIXTURES="$(jq -r '.fixtures[].file' "$MANIFEST")"
 
 while IFS= read -r m; do
   id="$(jq -r '.id' <<<"$m")"; spec="$(jq -r '.spec' <<<"$m")"; provider="$(jq -r '.provider' <<<"$m")"
+  # Optional per-model reasoning budget. Absent = send no thinkingConfig at all, which is what every
+  # entry did before and what production still does by default - so existing rows stay comparable
+  # with previously committed runs rather than silently changing meaning.
+  thinking="$(jq -r '.thinking // "" | tostring' <<<"$m")"; [ "$thinking" = "null" ] && thinking=""
   if [ -n "$ONLY" ]; then case ",$ONLY," in *",$id,"*) : ;; *) continue;; esac; fi
   # Validate OpenRouter slugs.
   if [ "$provider" = "openrouter" ] && ! slug_ok "$spec"; then
@@ -75,17 +79,20 @@ while IFS= read -r m; do
     printf '%s\n' "$AVAILABLE" | grep -iF "${spec##*/}" | head -3 | sed 's/^/         near-match: /' || true
     continue
   fi
-  echo "== Model: $id ($spec) =="
+  echo "== Model: $id ($spec)${thinking:+ [thinkingBudget=$thinking]} =="
   while IFS= read -r f; do
     [ -z "$f" ] && continue
     pf="$(mktemp)"; build_prompt "$f" > "$pf"   # same prompt across trials (temperature is 0)
     for trial in $(seq 1 "$TRIALS"); do
       echo "   - $f (trial $trial/$TRIALS)"
-      res="$(bash "$HERE/lib/call_model.sh" "$spec" "$pf")"
+      res="$(GEMINI_THINKING="$thinking" bash "$HERE/lib/call_model.sh" "$spec" "$pf")"
       # Never let a crashed call produce a 0-byte file that would later break the scorer.
       [ -z "$res" ] && res='{"text":"","error":"call_model.sh produced no output","prompt_tokens":0,"completion_tokens":0,"total_cost":null,"cost_source":"unknown","latency_ms":0}'
+      # thinking is recorded on every raw record so a committed run stays self-describing: two rows
+      # can share a spec, and without this the scorecard could not say which was the reasoning one.
       jq -c --arg model "$id" --arg spec "$spec" --arg fixture "$f" --argjson trial "$trial" \
-         '. + {model:$model, spec:$spec, fixture:$fixture, trial:$trial}' <<<"$res" \
+         --arg thinking "$thinking" \
+         '. + {model:$model, spec:$spec, fixture:$fixture, trial:$trial, thinking:$thinking}' <<<"$res" \
          > "$RAW/${id}__${f//\//_}__t${trial}.json"
     done
     rm -f "$pf"

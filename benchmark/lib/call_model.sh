@@ -30,7 +30,15 @@ call_gemini() {
   local model="$1" req resp text http rc pt ct start end lat
   if [ -z "${GEMINI_API_KEY:-}" ]; then emit "" "GEMINI_API_KEY not set" 0 0 null unknown 0; return; fi
   # temperature 0 for reproducibility across runs (benchmark, not production).
-  req="$(printf '%s' "$PROMPT" | jq -Rsc '{contents:[{parts:[{text:.}]}], generationConfig:{temperature:0}}')"
+  #
+  # thinkingBudget comes from the manifest entry's optional "thinking" key, passed through by run.sh
+  # as GEMINI_THINKING. Two entries can therefore share one spec at different reasoning settings,
+  # which is the only way to separate "this model is better" from "reasoning was switched on" - the
+  # confound that made the first gemini-3.7-flash run unable to answer the question it was asked.
+  req="$(printf '%s' "$PROMPT" | jq -Rsc --arg gt "${GEMINI_THINKING:-}" '
+    {contents:[{parts:[{text:.}]}],
+     generationConfig:({temperature:0}
+       + (if $gt == "" then {} else {thinkingConfig:{thinkingBudget:($gt|tonumber)}} end))}')"
   start="$(now_ms)"
   rc=0; resp="$(printf '%s' "$req" | curl -sS -m 240 -w '\n__HTTP__%{http_code}' \
     "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}" \
