@@ -71,7 +71,7 @@ while IFS= read -r m; do
   # Optional per-model reasoning budget. Absent = send no thinkingConfig at all, which is what every
   # entry did before and what production still does by default - so existing rows stay comparable
   # with previously committed runs rather than silently changing meaning.
-  thinking="$(jq -r '.thinking // "" | tostring' <<<"$m")"; [ "$thinking" = "null" ] && thinking=""
+  thinking="$(jq -r '.thinking // "" | tostring' <<<"$m")"
   # Warn HERE rather than downstream: a typo'd "thinking" value is a human editing this manifest,
   # and call_model.sh deliberately ignores anything non-integer instead of aborting, so without
   # this the model would just quietly score at default effort under a name saying otherwise.

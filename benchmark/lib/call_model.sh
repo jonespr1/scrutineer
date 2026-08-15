@@ -52,7 +52,12 @@ call_gemini() {
   http=""; case "$resp" in *__HTTP__*) http="${resp##*__HTTP__}"; resp="${resp%__HTTP__*}"; resp="${resp%$'\n'}";; esac
   text="$(printf '%s' "$resp" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null)"
   pt="$(printf '%s' "$resp" | jq -r '.usageMetadata.promptTokenCount // 0' 2>/dev/null)"
-  ct="$(printf '%s' "$resp" | jq -r '.usageMetadata.candidatesTokenCount // 0' 2>/dev/null)"
+  # Thinking tokens are BILLED AT THE OUTPUT RATE but are reported separately from
+  # candidatesTokenCount, so counting only candidates understates the cost of exactly the rows that
+  # enable thinking - which would have quietly rigged this benchmark's cost axis in their favour.
+  # Summed rather than dropped: total_cost must reflect what the run actually costs.
+  ct="$(printf '%s' "$resp" | jq -r '(.usageMetadata.candidatesTokenCount // 0) + (.usageMetadata.thoughtsTokenCount // 0)' 2>/dev/null)"
+  tt="$(printf '%s' "$resp" | jq -r '.usageMetadata.thoughtsTokenCount // 0' 2>/dev/null)"
   if [ -z "$text" ]; then
     local err fr
     err="$(printf '%s' "$resp" | jq -r '.error.message // empty' 2>/dev/null)"

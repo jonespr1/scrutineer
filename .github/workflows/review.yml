@@ -22,7 +22,13 @@
 #                   UNSET BY DEFAULT, so Gemini runs at whatever effort the model defaults to and
 #                   nothing is billed for thinking. Set it only if you have measured that it earns
 #                   its cost on your diffs - published scores for a "(high)" configuration of a
-#                   model are not evidence about the default one. "off"/"none" also disables.
+#                   model are not evidence about the default one.
+#                   "off"/"none"/"any", or unset, send NO thinkingConfig at all. "0" is different:
+#                   it sends an explicit thinkingBudget of 0, which asks the model to disable
+#                   thinking. Same intent, different request - use the words unless you specifically
+#                   want the explicit form. Anything else non-integer warns and falls back to unset.
+#                   Thinking tokens are billed at the OUTPUT rate and are included in the cost
+#                   reported in each review's footer.
 #
 # OpenRouter routing controls (apply to every OpenRouter slot) - repo Variables:
 #   OPENROUTER_HOSTS     Strict allow-list of host slugs. Default: EMPTY (no allow-list). Privacy is
@@ -314,7 +320,11 @@ jobs:
             # sent no reasoning config at all before this, so every Gemini review ran at whatever the
             # model defaults to - which is worth knowing when comparing against a published score for
             # a "(high)" reasoning configuration of the same model.
-            gt="${GEMINI_THINKING:-}"; gt="${gt//[[:space:]]/}"
+            # Trim only the ENDS. Stripping all whitespace would turn " 1 2" into "12" - a number
+            # the user never wrote, silently passing validation. Surprising a caller with a value
+            # they did not set is the exact failure this validation exists to prevent.
+            gt="${GEMINI_THINKING:-}"
+            gt="${gt#"${gt%%[![:space:]]*}"}"; gt="${gt%"${gt##*[![:space:]]}"}"
             case "$gt" in off|none|any) gt="" ;; esac
             if [ -n "$gt" ]; then
               case "${gt#-}" in
@@ -357,7 +367,10 @@ jobs:
             # Telemetry -> temp file the caller reads (functions run in a subshell, so globals won't
             # propagate). Gemini has no USD in its response, so cost is left "na" (estimate from tokens).
             pt="$(printf '%s' "$resp" | jq -r '.usageMetadata.promptTokenCount // 0' 2>/dev/null || echo 0)"
-            ct="$(printf '%s' "$resp" | jq -r '.usageMetadata.candidatesTokenCount // 0' 2>/dev/null || echo 0)"
+            # Thinking tokens are billed at the output rate but reported separately from
+            # candidatesTokenCount, so with GEMINI_THINKING on, counting only candidates would report
+            # a spend materially lower than the bill. Summed so the telemetry stays honest.
+            ct="$(printf '%s' "$resp" | jq -r '(.usageMetadata.candidatesTokenCount // 0) + (.usageMetadata.thoughtsTokenCount // 0)' 2>/dev/null || echo 0)"
             case "$pt" in ''|*[!0-9]*) pt=0 ;; esac; case "$ct" in ''|*[!0-9]*) ct=0 ;; esac
             # 4th field is the routed host; Gemini is called directly (not via OpenRouter) so it's "na".
             [ -n "${SLOT_META:-}" ] && printf '%s %s na na\n' "${pt:-0}" "${ct:-0}" > "$SLOT_META"
