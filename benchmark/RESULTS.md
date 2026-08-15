@@ -6,3 +6,4 @@ Newest run first.
 
 - [`local-20260714-r2`](results/local-20260714-r2/RESULTS.md) — 10 models, best single: **gemini-flash** (100.0%); best value: gemini-flash (100.0%, $0.0182)
 - [`local-20260714-r1`](results/local-20260714-r1/RESULTS.md) — 10 models, best single: **gemini-flash** (100.0%); best value: gemini-flash (100.0%, $0.0132)
+- [`20260815T001550Z`](results/20260815T001550Z/RESULTS.md) — 2 models, best single: **gemini-flash** (95.8%); best value: gemini-flash (95.8%, $0.0158)
