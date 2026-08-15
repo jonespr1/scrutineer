@@ -96,7 +96,7 @@ jobs:
 
       - name: 'Upload results artifact'
         if: always()   # preserve paid API results for download even if the commit/push step failed
-        uses: 'actions/upload-artifact@v4'
+        uses: 'actions/upload-artifact@v7'
         with:
           name: 'benchmark-${{ env.RUN_ID }}'
           path: 'benchmark/results/${{ env.RUN_ID }}'
