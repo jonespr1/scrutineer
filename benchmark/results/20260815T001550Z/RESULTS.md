@@ -4,6 +4,8 @@ Trials: 1 · temperature 0 · routing hosts=`any` sort=`throughput` quant=`fp8,f
 
 Scored against 18 planted bugs (3 Critical) across 8 buggy fixtures + 1 clean control. Detection is severity-weighted (Critical 3 / High 2 / Medium 1.5 / Low 1). 
 
+> **Targeted run — 2 of 11 manifest models scored** (`gemini-flash`, `gemini-3.7-flash`). Rankings below compare only these; this is not a full-panel result.
+
 ## Per-model
 
 | Rank | Model | Detection | Bugs (maj) | Missed Crit | Flaky | False+ | Avg latency | Cost/run | Notes |
