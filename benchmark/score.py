@@ -38,6 +38,11 @@ WEIGHT = {"Critical": 3.0, "High": 2.0, "Medium": 1.5, "Low": 1.0}
 PRICES = {
     "gemini-pro-latest":   (1.25, 10.0),   # estimate — confirm against your Google bill
     "gemini-flash-latest": (0.30, 2.50),   # estimate — confirm against your Google bill
+    # Introductory rate, half the launch price, published as ending 2026-12-31; it steps up to
+    # (1.50, 7.50) after that. A model missing from this table costs "n/a", which silently drops
+    # it from the best-value ranking entirely — so an unpriced entry looks like a scoring quirk
+    # when it is really a missing row here.
+    "gemini-3.7-flash":    (0.75, 3.75),   # estimate — confirm against your Google bill
 }
 
 

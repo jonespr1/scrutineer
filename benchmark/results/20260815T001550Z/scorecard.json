@@ -52,8 +52,8 @@
       "flaky": 0,
       "false_positives": 0.0,
       "avg_latency_ms": 6664,
-      "cost": null,
-      "cost_estimated": false,
+      "cost": 0.026995,
+      "cost_estimated": true,
       "prompt_tokens": 13348,
       "completion_tokens": 4529,
       "errors": [],
@@ -98,7 +98,7 @@
       "size": 2,
       "union_pct": 95.8,
       "missed_crit": 0,
-      "cost": null,
+      "cost": 0.042807,
       "false_positives": 0.0
     },
     {
@@ -108,7 +108,7 @@
       "size": 1,
       "union_pct": 91.7,
       "missed_crit": 0,
-      "cost": null,
+      "cost": 0.026995,
       "false_positives": 0.0
     }
   ]
