@@ -35,10 +35,15 @@ call_gemini() {
   # as GEMINI_THINKING. Two entries can therefore share one spec at different reasoning settings,
   # which is the only way to separate "this model is better" from "reasoning was switched on" - the
   # confound that made the first gemini-3.7-flash run unable to answer the question it was asked.
+  # The guard is a regex rather than an is-it-empty test so this stays a TOTAL function: jq's
+  # tonumber ABORTS on a non-numeric string, so `GEMINI_THINKING=off` (or a typo'd manifest value)
+  # would produce an empty request and a baffling failure. Anything that is not an integer is
+  # ignored here; run.sh warns about it, which is where a human would have made the mistake.
   req="$(printf '%s' "$PROMPT" | jq -Rsc --arg gt "${GEMINI_THINKING:-}" '
     {contents:[{parts:[{text:.}]}],
      generationConfig:({temperature:0}
-       + (if $gt == "" then {} else {thinkingConfig:{thinkingBudget:($gt|tonumber)}} end))}')"
+       + (if ($gt | test("^-?[0-9]+$")) then {thinkingConfig:{thinkingBudget:($gt|tonumber)}}
+          else {} end))}')"
   start="$(now_ms)"
   rc=0; resp="$(printf '%s' "$req" | curl -sS -m 240 -w '\n__HTTP__%{http_code}' \
     "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}" \

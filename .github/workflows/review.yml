@@ -321,10 +321,15 @@ jobs:
                 ''|*[!0-9]*) echo "Ignoring malformed GEMINI_THINKING='${GEMINI_THINKING}' (want an integer thinkingBudget, or -1 for dynamic)."; gt="" ;;
               esac
             fi
+            # Regex-guarded rather than an is-it-empty test, so the filter is TOTAL: jq's tonumber
+            # aborts on a non-numeric string, which would yield an empty request body. The bash
+            # validation above already guarantees numeric-or-empty and is what warns; this is the
+            # backstop that keeps a validation bug from turning into an unexplained failure.
             req="$(printf '%s' "$PROMPT" | jq -Rsc --arg gt "$gt" '
               {contents:[{parts:[{text:.}]}]}
-              + (if $gt == "" then {}
-                 else {generationConfig:{thinkingConfig:{thinkingBudget:($gt|tonumber)}}} end)')"
+              + (if ($gt | test("^-?[0-9]+$"))
+                 then {generationConfig:{thinkingConfig:{thinkingBudget:($gt|tonumber)}}}
+                 else {} end)')"
             rc=0; resp="$(printf '%s' "$req" | curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}" -H 'Content-Type: application/json' --data-binary @-)" || rc=$?
             http=""; case "$resp" in *__HTTP__*) http="${resp##*__HTTP__}"; resp="${resp%__HTTP__*}"; resp="${resp%$'\n'}";; esac
             text="$(printf '%s' "$resp" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null)"

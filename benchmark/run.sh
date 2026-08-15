@@ -72,6 +72,14 @@ while IFS= read -r m; do
   # entry did before and what production still does by default - so existing rows stay comparable
   # with previously committed runs rather than silently changing meaning.
   thinking="$(jq -r '.thinking // "" | tostring' <<<"$m")"; [ "$thinking" = "null" ] && thinking=""
+  # Warn HERE rather than downstream: a typo'd "thinking" value is a human editing this manifest,
+  # and call_model.sh deliberately ignores anything non-integer instead of aborting, so without
+  # this the model would just quietly score at default effort under a name saying otherwise.
+  if [ -n "$thinking" ]; then
+    case "${thinking#-}" in
+      ''|*[!0-9]*) echo "  WARN $id: ignoring non-integer thinking=$thinking (want a token budget, or -1 for dynamic)"; thinking="" ;;
+    esac
+  fi
   if [ -n "$ONLY" ]; then case ",$ONLY," in *",$id,"*) : ;; *) continue;; esac; fi
   # Validate OpenRouter slugs.
   if [ "$provider" = "openrouter" ] && ! slug_ok "$spec"; then
