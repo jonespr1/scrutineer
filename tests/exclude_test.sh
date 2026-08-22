@@ -88,9 +88,28 @@ survives 'whitespace around patterns is trimmed' '  package-lock.json ,  benchma
 # --- A pattern that matches nothing must drop nothing ------------------------------------------------
 survives 'non-matching pattern is inert'    'does/not/exist/*' "$ALL"
 
-# --- Never let a pattern take everything silently ----------------------------------------------------
-# '*' matching all files is legitimate behaviour, but it must be reported, which the note below covers.
-survives 'star matches everything'          '*'           ''
+# --- Excluding EVERYTHING must stop the run, not call the model with nothing --------------------------
+# The workflow's "Empty diff" guard runs BEFORE this block, so it cannot catch this case: a pattern
+# broad enough to match every changed file would otherwise leave an empty diff and continue into a
+# paid model call, posting a baffled "I see no changes" review. The block exits 0 instead - nothing
+# to review is a success. Note this means the `survives` helper sees no output for '*', so assert on
+# the exit code and message rather than inferring it from an empty path list.
+run_raw() { # $1 = DIFF_EXCLUDE -> prints "<exit code>|<stdout>"
+  local out code
+  out="$(DIFF_EXCLUDE="$1" DIFF="$(mk_diff)" bash -c '{ '"$SRC"'
+    } 2>/dev/null' 2>/dev/null)"; code=$?
+  printf '%s|%s' "$code" "$out"
+}
+raw_all="$(run_raw '*')"
+case "$raw_all" in
+  0\|*'nothing left to review'*) printf 'ok    %s\n' 'excluding everything exits 0 and says so' ;;
+  *) printf 'FAIL  %s\n        got=%s\n' 'excluding everything exits 0 and says so' "$raw_all"; fails=1 ;;
+esac
+raw_some="$(run_raw 'package-lock.json')"
+case "$raw_some" in
+  *'nothing left to review'*) printf 'FAIL  %s\n' 'partial exclusion does not trip the guard'; fails=1 ;;
+  *) printf 'ok    %s\n' 'partial exclusion does not trip the guard' ;;
+esac
 
 # --- The note: excluding files silently would be the same failure in a new coat ----------------------
 note_has() { # description  exclude  substring

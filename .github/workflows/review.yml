@@ -238,12 +238,25 @@ jobs:
             before=${#DIFF}
             # Drop whole `diff --git` sections whose path matched. Bash did the globbing (correct
             # shell semantics); awk only does the set lookup.
-            DIFF="$(printf '%s\n' "$DIFF" | awk -v ex="$EXCLUDED_PATHS" '
-              BEGIN { n = split(ex, a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }
+            # Passed via ENVIRON, not -v: awk processes backslash escapes in a -v assignment, so a
+            # path containing a literal backslash followed by n/t/... would be mis-keyed and survive
+            # the filter unnoticed. ENVIRON is taken verbatim.
+            DIFF="$(printf '%s\n' "$DIFF" | EXCL="$EXCLUDED_PATHS" awk '
+              BEGIN { n = split(ENVIRON["EXCL"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }
               /^diff --git / { p = $0; sub(/^diff --git a\/.* b\//, "", p); skip = (p in drop) }
               !skip')"
             echo "DIFF_EXCLUDE dropped ${n_excl} file(s) from the diff: ${before} -> ${#DIFF} chars."
             EXCL_NOTE="$(printf '\n\n> Note: %s changed file(s) were excluded from the diff by DIFF_EXCLUDE and were not reviewed.' "$n_excl")"
+          fi
+
+          # The "Empty diff" guard above runs BEFORE exclusions, so it cannot catch this: a pattern
+          # broad enough to match every changed file (say "*", or "*.ts" on a TypeScript-only PR)
+          # leaves nothing behind and the run would otherwise continue into a paid model call with an
+          # empty diff and empty context, posting a baffled "I see no changes" review. Exit green -
+          # nothing to review is a success, exactly as it is for a genuinely empty diff.
+          if [ -n "$EXCLUDED_PATHS" ] && [ -z "${DIFF//[[:space:]]/}" ]; then
+            echo "All ${n_excl} changed file(s) matched DIFF_EXCLUDE; nothing left to review."
+            exit 0
           fi
 
           MAX=200000
