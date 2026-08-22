@@ -5,6 +5,28 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.5.0 (pending)
+
+### Added
+- **`DIFF_EXCLUDE`** — comma-separated globs of paths to keep out of the review, e.g.
+  `"package-lock.json,*.lock,benchmark/results/*"`. **Empty by default**, so nothing changes until a
+  repo opts in. Also applies to the full-file context, and excluded files still appear in the
+  changed-files list so the reviewer knows they changed and simply wasn't shown them. The review
+  reports how many were held back — silently dropping code from a review would be the same class of
+  failure this fixes.
+
+  **Why it exists.** The diff is capped at 200,000 characters and truncated in GitHub's
+  *alphabetical* file order, so one large generated file pushes real code past the end. The reviewer
+  notes the truncation in a single line of small print and then reviews confidently on a partial
+  payload, while you pay for every token it did read. Measured on this repo's own PR #24: a 353,605
+  character diff against the cap, with 111 committed benchmark artifacts sitting alphabetically
+  between `manifest.json` and `run.sh` — so `run.sh`, both test suites and `scorecard.json` were
+  never in the payload, across a round costing ~$0.36. Lockfiles are the common case: `package-lock`
+  sorts before `src` and `tests`.
+
+  Raising the cap would only move the problem and cost more. `setup.ps1 -DiffExclude` sets it across
+  repos.
+
 ## v1.4.8 (pending)
 
 ### Added

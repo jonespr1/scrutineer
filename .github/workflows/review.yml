@@ -52,6 +52,16 @@
 #                        under it). Premium models (anthropic/*, openai/*) exceed it - set "none" for those.
 #   OPENROUTER_ZDR       zero-data-retention hosts only. Default: true. Set "false" to allow
 #                        non-ZDR hosts (needed for models that have no ZDR host on OpenRouter).
+#   DIFF_EXCLUDE         Comma-separated globs of paths to keep OUT of the review, e.g.
+#                        "package-lock.json,*.lock,benchmark/results/*". EMPTY BY DEFAULT.
+#                        The diff is capped at 200,000 characters and truncated in GitHub's
+#                        ALPHABETICAL file order, so one big generated file pushes real code past
+#                        the end - reviewed confidently on a partial payload, at full token cost.
+#                        Excluding by path fixes that; raising the cap only moves it. Applies to the
+#                        full-file context too. Excluded files still appear in the changed-files
+#                        list, and the review says how many were held back. These are shell `case`
+#                        globs, so `*` matches `/` as well: "dir/*" covers everything beneath it.
+#
 #   OPENROUTER_DATA_COLLECTION  deny (default) | allow. "allow" permits providers that train on your
 #                        prompts (free "stealth"/preview models). Only for non-proprietary code.
 #
@@ -116,6 +126,7 @@ jobs:
           OPENROUTER_MAXTOKENS: '${{ vars.OPENROUTER_MAXTOKENS }}'
           OPENROUTER_ZDR: '${{ vars.OPENROUTER_ZDR }}'
           OPENROUTER_DATA_COLLECTION: '${{ vars.OPENROUTER_DATA_COLLECTION }}'
+          DIFF_EXCLUDE: '${{ vars.DIFF_EXCLUDE }}'
           CONTEXT_BUDGET: '${{ vars.CONTEXT_BUDGET }}'
           REPO: '${{ github.repository }}'
           PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
@@ -187,6 +198,54 @@ jobs:
             exit 1
           fi
           if [ -z "$DIFF" ]; then echo "Empty diff; nothing to review."; exit 0; fi
+          # 1a) Path exclusions, applied BEFORE the size cap below - which is the entire point.
+          # The cap truncates the diff by raw CHARACTER COUNT in GitHub's ALPHABETICAL file order, so
+          # one large generated file silently pushes real code past the end. The reviewer then says so
+          # in one line of small print and reviews confidently on what it did get, while you pay for
+          # every token it read. Measured on this repo's own PR #24: a 353,605-char diff against a
+          # 200,000 cap, where 111 committed benchmark artifacts sat alphabetically between
+          # manifest.json and run.sh - so run.sh, both test suites and scorecard.json were never in
+          # the payload, for ~$0.36 of reviewer spend. Excluding by path removes the cause; raising
+          # the cap only moves it, and costs more.
+          #
+          # DIFF_EXCLUDE is comma-separated shell globs matched against the path. These are `case`
+          # patterns, NOT gitignore: `*` matches `/` too, so "benchmark/results/*" covers everything
+          # beneath it and "*.lock" matches at any depth. Empty by default - no repo changes
+          # behaviour until it opts in. Excluded files are still listed in the changed-files list
+          # sent to the model, so it knows they changed and simply was not shown them.
+          EXPATS=()
+          [ -n "${DIFF_EXCLUDE:-}" ] && IFS=',' read -r -a EXPATS <<< "$DIFF_EXCLUDE"
+          path_excluded() {
+            local pth="$1" pat
+            for pat in ${EXPATS[@]+"${EXPATS[@]}"}; do
+              pat="${pat#"${pat%%[![:space:]]*}"}"; pat="${pat%"${pat##*[![:space:]]}"}"
+              [ -n "$pat" ] || continue
+              # shellcheck disable=SC2254  # unquoted deliberately: $pat IS the glob to match against
+              case "$pth" in $pat) return 0 ;; esac
+            done
+            return 1
+          }
+          EXCLUDED_PATHS=""
+          if [ "${#EXPATS[@]}" -gt 0 ]; then
+            while IFS= read -r pth; do
+              [ -n "$pth" ] || continue
+              path_excluded "$pth" && EXCLUDED_PATHS="${EXCLUDED_PATHS}${pth}"$'\n'
+            done < <(printf '%s\n' "$DIFF" | sed -n 's|^diff --git a/.* b/||p')
+          fi
+          EXCL_NOTE=""
+          if [ -n "$EXCLUDED_PATHS" ]; then
+            n_excl="$(printf '%s' "$EXCLUDED_PATHS" | grep -c . || true)"
+            before=${#DIFF}
+            # Drop whole `diff --git` sections whose path matched. Bash did the globbing (correct
+            # shell semantics); awk only does the set lookup.
+            DIFF="$(printf '%s\n' "$DIFF" | awk -v ex="$EXCLUDED_PATHS" '
+              BEGIN { n = split(ex, a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }
+              /^diff --git / { p = $0; sub(/^diff --git a\/.* b\//, "", p); skip = (p in drop) }
+              !skip')"
+            echo "DIFF_EXCLUDE dropped ${n_excl} file(s) from the diff: ${before} -> ${#DIFF} chars."
+            EXCL_NOTE="$(printf '\n\n> Note: %s changed file(s) were excluded from the diff by DIFF_EXCLUDE and were not reviewed.' "$n_excl")"
+          fi
+
           MAX=200000
           TRUNC_NOTE=""
           if [ "${#DIFF}" -gt "$MAX" ]; then
@@ -208,6 +267,10 @@ jobs:
           for f in "${CHANGED[@]:-}"; do
             [ -z "$f" ] && continue
             case "$f" in *.png|*.jpg|*.jpeg|*.gif|*.ico|*.svg|*.pdf|*.zip|*.gz|*.tar|*.woff|*.woff2|*.ttf|*.eot|*.mp3|*.mp4|*.wav|*.lock|*.min.js|*.min.css) continue ;; esac
+            # DIFF_EXCLUDE applies here too. Excluding a file from the diff but still sending its
+            # full content would leave it consuming CONTEXT_BUDGET - the fix would only half work,
+            # and on a lockfile the content is far bigger than its diff.
+            path_excluded "$f" && continue
             # URL-encode the path (preserving slashes) so paths with spaces resolve; strip any invalid
             # UTF-8 (a binary file with an unlisted extension) so it can never break the JSON encode.
             f_enc="$(printf '%s' "$f" | jq -sRr @uri | sed 's/%2F/\//g')"
@@ -526,7 +589,7 @@ jobs:
             # detect that this slot already reviewed this exact commit (see already_reviewed).
             # Marker also carries per-review telemetry (latency, tokens, real cost) so a trial can be
             # aggregated straight from the PR comments - Gemini included (it is not in OpenRouter billing).
-            body="$(printf '## 🤖 Review - `%s`\n\n%s%s\n\n<sub>Automated review - not a substitute for human review.</sub>\n<!-- scrutineer sha=%s lat=%ss in=%s out=%s cost=%s host=%s -->' "$1" "$2" "$TRUNC_NOTE" "${HEAD_SHA:-none}" "${3:-0}" "${4:-0}" "${5:-0}" "${6:-na}" "${7:-na}")"
+            body="$(printf '## 🤖 Review - `%s`\n\n%s%s\n\n<sub>Automated review - not a substitute for human review.</sub>\n<!-- scrutineer sha=%s lat=%ss in=%s out=%s cost=%s host=%s -->' "$1" "$2" "${EXCL_NOTE}${TRUNC_NOTE}" "${HEAD_SHA:-none}" "${3:-0}" "${4:-0}" "${5:-0}" "${6:-na}" "${7:-na}")"
             printf '%s' "$body" | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file -
           }
 

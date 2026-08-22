@@ -19,6 +19,13 @@
   reviewer set defined in review.yml. Prefer that: a pinned variable stops a future change to
   the default panel from ever reaching the repo - the same trap as a stale host allow-list.
 
+.PARAMETER DiffExclude
+  Comma-separated globs of paths to keep out of the review, e.g.
+  "package-lock.json,*.lock". The diff is capped at 200,000 characters and truncated in
+  ALPHABETICAL file order, so one large generated file pushes real code past the end - the
+  reviewer then reports on a partial payload, at full token cost. Excluding by path fixes that.
+  Empty (the default) DELETES the variable, restoring the unfiltered behaviour.
+
 .PARAMETER OpenRouterHosts
   Optional allow-list of host slugs for OpenRouter models (e.g. "novita,fireworks,together,gmicloud").
 
@@ -38,6 +45,7 @@ param(
   [string] $OpenRouterHosts = '',
   [string] $OpenRouterSort = '',
   [string] $OpenRouterMaxPrice = '',
+  [string] $DiffExclude = '',
   [string] $Ref = 'jonespr1/scrutineer/.github/workflows/review.yml@v1',
   [string] $Branch = 'main'
 )
@@ -182,6 +190,7 @@ foreach ($repo in $Repos) {
   if ($OpenRouterHosts)    { Set-RepoVar $repo 'OPENROUTER_HOSTS' $OpenRouterHosts }    else { Remove-RepoVar $repo 'OPENROUTER_HOSTS' }
   if ($OpenRouterSort)     { Set-RepoVar $repo 'OPENROUTER_SORT' $OpenRouterSort }      else { Remove-RepoVar $repo 'OPENROUTER_SORT' }
   if ($OpenRouterMaxPrice) { Set-RepoVar $repo 'OPENROUTER_MAXPRICE' $OpenRouterMaxPrice } else { Remove-RepoVar $repo 'OPENROUTER_MAXPRICE' }
+  if ($DiffExclude)        { Set-RepoVar $repo 'DIFF_EXCLUDE' $DiffExclude }              else { Remove-RepoVar $repo 'DIFF_EXCLUDE' }
   Commit-Caller -Repo $repo -B64 $callerB64
 }
 $geminiKey = $null; $orKey = $null

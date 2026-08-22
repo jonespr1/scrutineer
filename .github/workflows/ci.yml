@@ -68,6 +68,8 @@ jobs:
         run: bash tests/caller_test.sh
       - name: 'Gemini reasoning budget (GEMINI_THINKING)'
         run: bash tests/thinking_test.sh
+      - name: 'Diff path exclusions (DIFF_EXCLUDE)'
+        run: bash tests/exclude_test.sh
 
   lint:
     name: Lint · actionlint · PSScriptAnalyzer
