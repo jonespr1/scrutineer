@@ -189,5 +189,70 @@ skip_is 'source is still sent'                src/app.ts           send
 skip_is 'config json is still sent'           tsconfig.json        send
 skip_is 'a file merely containing "lock"'     src/lockManager.ts   send
 
+# --- The withheld-paths PROMPT block -------------------------------------------------------------
+# Extracted separately, because it lives further down the workflow than the filter block above.
+#
+# Why it needs its own coverage: this block is the ONLY thing that tells the MODEL a file was
+# withheld. Before it existed, EXCL_NOTE reached the posted comment and the reviewer was told
+# nothing - it saw a diff with no lockfile in it and had to infer, which is the "misled by absence"
+# failure the whole feature exists to close, aimed at the reviewer instead of the reader. The filter
+# tests above pass whether or not this block is present, so without this the fix for that finding
+# was itself unguarded. (minimax-m3, #26.)
+# There are TWO `if [ -n "$EXCLUDED_PATHS" ]` blocks in the workflow - the earlier one logs the
+# filter result - so a plain awk range would concatenate both and drag a log line into the prompt.
+# Buffer each range and keep only the one that builds the prompt.
+PSRC="$(awk '
+  /^          if \[ -n "\$EXCLUDED_PATHS" \]; then$/ { inblk = 1; buf = ""; }
+  inblk { buf = buf $0 "\n" }
+  inblk && /^          fi$/ { if (buf ~ /deliberately withheld/) printf "%s", buf; inblk = 0 }
+' "$WF" | sed 's/^          //')"
+[ -n "$PSRC" ]                                       || bad "no EXCLUDED_PATHS prompt block"
+printf '%s' "$PSRC" | grep -q 'DID change'           || bad "prompt block missing the 'DID change' claim"
+printf '%s\n' "$PSRC" | bash -n 2>/dev/null          || bad "prompt block is not valid bash"
+
+prompt_with() { # $1 = EXCLUDED_PATHS value -> the resulting PROMPT
+  EXCLUDED_PATHS="$1" bash -c '
+    PROMPT="BASE PROMPT TEXT"
+    '"$PSRC"'
+    printf "%s" "$PROMPT"'
+}
+p_has() { # description  excluded_paths  substring_that_must_appear
+  local got; got="$(prompt_with "$2")"
+  case "$got" in *"$3"*) printf 'ok    %s\n' "$1" ;;
+    *) printf 'FAIL  %s\n        want substring=%s\n        got=%s\n' "$1" "$3" "$got"; fails=1 ;;
+  esac
+}
+p_hasnot() { # description  excluded_paths  substring_that_must_NOT_appear
+  local got; got="$(prompt_with "$2")"
+  case "$got" in *"$3"*) printf 'FAIL  %s\n        unwanted substring=%s\n        got=%s\n' "$1" "$3" "$got"; fails=1 ;;
+    *) printf 'ok    %s\n' "$1" ;;
+  esac
+}
+
+EXCL_TWO='package-lock.json
+benchmark/results/r1/raw/a.json'
+
+# The paths themselves must reach the model - a note saying "some files were withheld" without
+# naming them would leave the model unable to tell WHICH absences are meaningful.
+p_has    'withheld paths are named in the prompt'    "$EXCL_TWO" 'package-lock.json'
+p_has    'every withheld path is named, not just one' "$EXCL_TWO" 'benchmark/results/r1/raw/a.json'
+p_has    'the base prompt survives'                  "$EXCL_TWO" 'BASE PROMPT TEXT'
+
+# The three load-bearing phrases. A future edit that softens any of them re-opens the finding this
+# block was written for, and nothing else in the suite would notice.
+p_has    'states the files DID change'               "$EXCL_TWO" 'They DID change in'
+p_has    'and that the claim is about THIS PR'        "$EXCL_TWO" 'this PR. Do not infer'
+p_has    'forbids inferring from absence'            "$EXCL_TWO" 'Do not infer anything from their absence'
+p_has    'forbids reporting them as unchanged'       "$EXCL_TWO" 'do not report them as unchanged'
+
+# Off by default: with nothing excluded the prompt must be byte-identical to what it was before this
+# feature existed, or every repo on @v1 pays for tokens describing an empty list.
+p_hasnot 'no exclusions: no withheld block at all'   ''          'deliberately withheld'
+if [ "$(prompt_with '')" = "BASE PROMPT TEXT" ]; then
+  ok_unchanged=1; printf 'ok    %s\n' 'no exclusions: prompt is unchanged'
+else
+  printf 'FAIL  %s\n        got=%s\n' 'no exclusions: prompt is unchanged' "$(prompt_with '')"; fails=1
+fi
+
 [ "$fails" -eq 0 ] && echo "All exclude tests passed." || echo "Some exclude tests FAILED." >&2
 exit "$fails"
