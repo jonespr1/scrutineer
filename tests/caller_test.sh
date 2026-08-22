@@ -79,5 +79,31 @@ else
   ok "review.yml: declares no job permissions (inherits the caller's)"
 fi
 
+# --- Third-party actions must be SHA-pinned ------------------------------------------------------
+# ci.yml's header states "Third-party actions are SHA-pinned", but that was only true of ci.yml:
+# review.yml and benchmark.yml sat on bare @v4 tags for months without anything noticing. A tag is
+# repointable by its owner, so a moving tag on review.yml means a third party can change what all
+# 14 consumer repos execute, with no PR and no diff. This asserts the stated policy rather than
+# trusting it.
+#
+# The ONE deliberate exception is scrutineer's own dogfood caller, which pins
+# jonespr1/scrutineer/...@v1 - the moving major alias is the distribution mechanism, and pinning it
+# to a SHA is the exact failure the estate's Dependabot ignore rules exist to prevent.
+unpinned=0
+while IFS= read -r line; do
+  file="${line%%:*}"; rest="${line#*:}"; lineno="${rest%%:*}"; ref="${rest#*:}"
+  # The owning repo's own reusable workflow, pinned to its moving major alias - deliberate.
+  case "$ref" in *"jonespr1/scrutineer/.github/workflows/"*) continue ;; esac
+  # Local (./path) references have no version to pin.
+  case "$ref" in *"uses: './"*|*'uses: "./'*|*"uses: ./"*) continue ;; esac
+  sha="${ref##*@}"; sha="${sha%%[\'\" ]*}"
+  if printf '%s' "$sha" | grep -qE '^[0-9a-f]{40}$'; then
+    :
+  else
+    printf 'FAIL  %s:%s is not SHA-pinned (@%s)\n' "${file##*/}" "$lineno" "$sha"; unpinned=1; fails=1
+  fi
+done < <(grep -rn "uses: *['\"]*[a-zA-Z0-9_.-]*/" "$ROOT/.github/workflows/" 2>/dev/null | sed "s|$ROOT/.github/workflows/||")
+[ "$unpinned" -eq 0 ] && ok "every third-party action is SHA-pinned"
+
 [ "$fails" -eq 0 ] && echo "All caller tests passed." || echo "Some caller tests FAILED." >&2
 exit "$fails"
