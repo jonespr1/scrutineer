@@ -18,6 +18,20 @@
 #                     REVIEWERS = gemini, z-ai/glm-5.2
 #                     REVIEWERS = google/gemini-2.5-flash, z-ai/glm-5.2
 #   GEMINI_MODEL    Model for a bare "gemini" slot (default: gemini-flash-latest).
+#   GEMINI_THINKING Reasoning budget for Gemini slots, in tokens; -1 lets the model decide.
+#                   UNSET BY DEFAULT, which does NOT mean "no thinking": current Gemini models think
+#                   on their own, and you are already billed for it. Measured on gemini-flash-latest
+#                   with no thinkingConfig at all: ~1,167 thinking tokens per review call, against
+#                   ~524 tokens of actual review. This variable sets the BUDGET for thinking that is
+#                   happening either way. Set it only if you have measured that a larger budget earns
+#                   its cost on your diffs - a published score for a "(high)" configuration of a
+#                   model is not evidence about the default one.
+#                   "off"/"none"/"any", or unset, send NO thinkingConfig at all. "0" is different:
+#                   it sends an explicit thinkingBudget of 0, which asks the model to disable
+#                   thinking. Same intent, different request - use the words unless you specifically
+#                   want the explicit form. Anything else non-integer warns and falls back to unset.
+#                   Thinking tokens are billed at the OUTPUT rate and are included in the cost
+#                   reported in each review's footer.
 #
 # OpenRouter routing controls (apply to every OpenRouter slot) - repo Variables:
 #   OPENROUTER_HOSTS     Strict allow-list of host slugs. Default: EMPTY (no allow-list). Privacy is
@@ -94,6 +108,7 @@ jobs:
           OPENROUTER_API_KEY: '${{ secrets.OPENROUTER_API_KEY }}'
           REVIEWERS: '${{ vars.REVIEWERS }}'
           GEMINI_MODEL: '${{ vars.GEMINI_MODEL }}'
+          GEMINI_THINKING: '${{ vars.GEMINI_THINKING }}'
           OPENROUTER_HOSTS: '${{ vars.OPENROUTER_HOSTS }}'
           OPENROUTER_SORT: '${{ vars.OPENROUTER_SORT }}'
           OPENROUTER_MAXPRICE: '${{ vars.OPENROUTER_MAXPRICE }}'
@@ -303,7 +318,35 @@ jobs:
             if [ -z "${GEMINI_API_KEY:-}" ]; then printf '⚠️ GEMINI_API_KEY is not set for this repo.'; return; fi
             # Build the request and send it via stdin, never argv: PROMPT can be hundreds of KB, which
             # would blow the OS single-argument limit (~128KB) if passed to jq --arg or curl -d.
-            req="$(printf '%s' "$PROMPT" | jq -Rsc '{contents:[{parts:[{text:.}]}]}')"
+            # Reasoning effort, OFF unless GEMINI_THINKING is set - deliberately opt-in. Every repo
+            # in the estate inherits this workflow; thinking tokens are BILLED, and a field this API
+            # version did not recognise would 400 every Gemini review at once. Opt-in keeps both the
+            # cost and the blast radius with whoever turns it on.
+            #
+            # Value is a thinkingBudget in tokens; -1 asks the model to decide (dynamic). Scrutineer
+            # sent no reasoning config at all before this, so every Gemini review ran at whatever the
+            # model defaults to - which is worth knowing when comparing against a published score for
+            # a "(high)" reasoning configuration of the same model.
+            # Trim only the ENDS. Stripping all whitespace would turn " 1 2" into "12" - a number
+            # the user never wrote, silently passing validation. Surprising a caller with a value
+            # they did not set is the exact failure this validation exists to prevent.
+            gt="${GEMINI_THINKING:-}"
+            gt="${gt#"${gt%%[![:space:]]*}"}"; gt="${gt%"${gt##*[![:space:]]}"}"
+            case "$gt" in off|none|any) gt="" ;; esac
+            if [ -n "$gt" ]; then
+              case "${gt#-}" in
+                ''|*[!0-9]*) echo "Ignoring malformed GEMINI_THINKING='${GEMINI_THINKING}' (want an integer thinkingBudget, or -1 for dynamic)."; gt="" ;;
+              esac
+            fi
+            # Regex-guarded rather than an is-it-empty test, so the filter is TOTAL: jq's tonumber
+            # aborts on a non-numeric string, which would yield an empty request body. The bash
+            # validation above already guarantees numeric-or-empty and is what warns; this is the
+            # backstop that keeps a validation bug from turning into an unexplained failure.
+            req="$(printf '%s' "$PROMPT" | jq -Rsc --arg gt "$gt" '
+              {contents:[{parts:[{text:.}]}]}
+              + (if ($gt | test("^-?[0-9]+$"))
+                 then {generationConfig:{thinkingConfig:{thinkingBudget:($gt|tonumber)}}}
+                 else {} end)')"
             rc=0; resp="$(printf '%s' "$req" | curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}" -H 'Content-Type: application/json' --data-binary @-)" || rc=$?
             http=""; case "$resp" in *__HTTP__*) http="${resp##*__HTTP__}"; resp="${resp%__HTTP__*}"; resp="${resp%$'\n'}";; esac
             text="$(printf '%s' "$resp" | jq -r '.candidates[0].content.parts[0].text // empty' 2>/dev/null)"
@@ -331,7 +374,10 @@ jobs:
             # Telemetry -> temp file the caller reads (functions run in a subshell, so globals won't
             # propagate). Gemini has no USD in its response, so cost is left "na" (estimate from tokens).
             pt="$(printf '%s' "$resp" | jq -r '.usageMetadata.promptTokenCount // 0' 2>/dev/null || echo 0)"
-            ct="$(printf '%s' "$resp" | jq -r '.usageMetadata.candidatesTokenCount // 0' 2>/dev/null || echo 0)"
+            # Thinking tokens are billed at the output rate but reported separately from
+            # candidatesTokenCount, so with GEMINI_THINKING on, counting only candidates would report
+            # a spend materially lower than the bill. Summed so the telemetry stays honest.
+            ct="$(printf '%s' "$resp" | jq -r '(.usageMetadata.candidatesTokenCount // 0) + (.usageMetadata.thoughtsTokenCount // 0)' 2>/dev/null || echo 0)"
             case "$pt" in ''|*[!0-9]*) pt=0 ;; esac; case "$ct" in ''|*[!0-9]*) ct=0 ;; esac
             # 4th field is the routed host; Gemini is called directly (not via OpenRouter) so it's "na".
             [ -n "${SLOT_META:-}" ] && printf '%s %s na na\n' "${pt:-0}" "${ct:-0}" > "$SLOT_META"

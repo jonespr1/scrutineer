@@ -66,6 +66,8 @@ jobs:
         run: bash tests/routing_test.sh
       - name: 'Callers (trigger anchoring + permission grants)'
         run: bash tests/caller_test.sh
+      - name: 'Gemini reasoning budget (GEMINI_THINKING)'
+        run: bash tests/thinking_test.sh
 
   lint:
     name: Lint · actionlint · PSScriptAnalyzer

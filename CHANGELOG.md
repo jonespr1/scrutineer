@@ -5,6 +5,25 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.4.8 (pending)
+
+### Added
+- **`GEMINI_THINKING`** — an optional reasoning budget for Gemini slots, in tokens (`-1` lets the
+  model decide). **Unset by default**: the request is byte-identical to before, so nothing changes
+  and nothing extra is billed unless you opt in. Malformed values warn and fall back to off rather
+  than failing the review.
+
+### Fixed
+- **Gemini cost reporting was understating your bill, and still is until you take this release.**
+  Thinking tokens are billed at the output rate but Gemini reports them in `thoughtsTokenCount`,
+  separately from `candidatesTokenCount` — and only the latter was counted. This is not hypothetical
+  and not limited to the new variable: measured on `gemini-flash-latest` with *no* reasoning config
+  at all, a review call spends **~1,167 thinking tokens against ~524 tokens of actual review**, so
+  roughly three quarters of the output spend was invisible. Current Gemini models think whether or
+  not you ask them to; `GEMINI_THINKING` only sets the budget for something already happening. The
+  reported figure in each review footer will rise on upgrade — the underlying spend does not
+  change, it was always this.
+
 ## v1.4.7 (pending)
 
 ### Fixed

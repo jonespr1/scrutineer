@@ -1,0 +1,310 @@
+{
+  "run_id": "20260815T013107Z",
+  "strict": false,
+  "trials": 3,
+  "total_bugs": 18,
+  "total_weight": 36.0,
+  "n_critical": 3,
+  "models": [
+    {
+      "model": "gemini-flash-high",
+      "spec": "gemini:gemini-flash-latest",
+      "ntrials": 3,
+      "detection_pct": 98.6,
+      "detected_maj": 18,
+      "missed_crit": 0,
+      "flaky": 1,
+      "false_positives": 0.0,
+      "avg_latency_ms": 11801,
+      "cost": 0.081344,
+      "cost_estimated": true,
+      "prompt_tokens": 40044,
+      "completion_tokens": 92807,
+      "errors": [],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 1.0,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 0.6666666666666666,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    },
+    {
+      "model": "gemini-flash",
+      "spec": "gemini:gemini-flash-latest",
+      "ntrials": 3,
+      "detection_pct": 95.8,
+      "detected_maj": 17,
+      "missed_crit": 0,
+      "flaky": 2,
+      "false_positives": 0.0,
+      "avg_latency_ms": 6897,
+      "cost": 0.042055,
+      "cost_estimated": true,
+      "prompt_tokens": 40044,
+      "completion_tokens": 45661,
+      "errors": [],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 0.3333333333333333,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 0.6666666666666666,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    },
+    {
+      "model": "gemini-3.7-flash-high",
+      "spec": "gemini:gemini-3.7-flash",
+      "ntrials": 3,
+      "detection_pct": 95.8,
+      "detected_maj": 17,
+      "missed_crit": 0,
+      "flaky": 2,
+      "false_positives": 0.0,
+      "avg_latency_ms": 11400,
+      "cost": 0.133126,
+      "cost_estimated": true,
+      "prompt_tokens": 40044,
+      "completion_tokens": 98492,
+      "errors": [],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 0.6666666666666666,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 0.3333333333333333,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    },
+    {
+      "model": "gemini-3.7-flash",
+      "spec": "gemini:gemini-3.7-flash",
+      "ntrials": 3,
+      "detection_pct": 94.4,
+      "detected_maj": 17,
+      "missed_crit": 0,
+      "flaky": 1,
+      "false_positives": 0.0,
+      "avg_latency_ms": 6980,
+      "cost": 0.065441,
+      "cost_estimated": true,
+      "prompt_tokens": 40044,
+      "completion_tokens": 44344,
+      "errors": [],
+      "frac": {
+        "B1": 1.0,
+        "B2": 1.0,
+        "B3": 1.0,
+        "B4": 1.0,
+        "B5": 1.0,
+        "B6": 0.0,
+        "B7": 1.0,
+        "B8": 1.0,
+        "B9": 0.6666666666666666,
+        "B10": 1.0,
+        "B11": 1.0,
+        "B12": 1.0,
+        "B13": 1.0,
+        "B14": 1.0,
+        "B15": 1.0,
+        "B16": 1.0,
+        "B17": 1.0,
+        "B18": 1.0
+      }
+    }
+  ],
+  "combinations": [
+    {
+      "members": [
+        "gemini-flash-high"
+      ],
+      "size": 1,
+      "union_pct": 98.6,
+      "missed_crit": 0,
+      "cost": 0.081344,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash-high",
+        "gemini-flash"
+      ],
+      "size": 2,
+      "union_pct": 98.6,
+      "missed_crit": 0,
+      "cost": 0.123399,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3.7-flash",
+        "gemini-flash-high"
+      ],
+      "size": 2,
+      "union_pct": 98.6,
+      "missed_crit": 0,
+      "cost": 0.146785,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3.7-flash",
+        "gemini-flash-high",
+        "gemini-flash"
+      ],
+      "size": 3,
+      "union_pct": 98.6,
+      "missed_crit": 0,
+      "cost": 0.18884,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3.7-flash-high",
+        "gemini-flash-high"
+      ],
+      "size": 2,
+      "union_pct": 98.6,
+      "missed_crit": 0,
+      "cost": 0.21447,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3.7-flash-high",
+        "gemini-flash-high",
+        "gemini-flash"
+      ],
+      "size": 3,
+      "union_pct": 98.6,
+      "missed_crit": 0,
+      "cost": 0.256525,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3.7-flash-high",
+        "gemini-3.7-flash",
+        "gemini-flash-high"
+      ],
+      "size": 3,
+      "union_pct": 98.6,
+      "missed_crit": 0,
+      "cost": 0.279911,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3.7-flash-high",
+        "gemini-flash"
+      ],
+      "size": 2,
+      "union_pct": 97.2,
+      "missed_crit": 0,
+      "cost": 0.175181,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3.7-flash-high",
+        "gemini-3.7-flash"
+      ],
+      "size": 2,
+      "union_pct": 97.2,
+      "missed_crit": 0,
+      "cost": 0.198567,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3.7-flash-high",
+        "gemini-3.7-flash",
+        "gemini-flash"
+      ],
+      "size": 3,
+      "union_pct": 97.2,
+      "missed_crit": 0,
+      "cost": 0.240622,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-flash"
+      ],
+      "size": 1,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.042055,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3.7-flash",
+        "gemini-flash"
+      ],
+      "size": 2,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.107496,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3.7-flash-high"
+      ],
+      "size": 1,
+      "union_pct": 95.8,
+      "missed_crit": 0,
+      "cost": 0.133126,
+      "false_positives": 0.0
+    },
+    {
+      "members": [
+        "gemini-3.7-flash"
+      ],
+      "size": 1,
+      "union_pct": 94.4,
+      "missed_crit": 0,
+      "cost": 0.065441,
+      "false_positives": 0.0
+    }
+  ]
+}

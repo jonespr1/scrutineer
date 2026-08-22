@@ -1,0 +1,13 @@
+{
+  "run_id": "20260815T013107Z",
+  "started_at": "20260815T013107Z",
+  "trials": 3,
+  "routing": {
+    "openrouter_hosts": "",
+    "sort": "throughput",
+    "zdr": "true",
+    "max_price": "",
+    "quantizations": "fp8,fp16,bf16"
+  },
+  "slugs_validated": true
+}
