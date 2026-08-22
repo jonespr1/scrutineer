@@ -19,10 +19,13 @@
 #                     REVIEWERS = google/gemini-2.5-flash, z-ai/glm-5.2
 #   GEMINI_MODEL    Model for a bare "gemini" slot (default: gemini-flash-latest).
 #   GEMINI_THINKING Reasoning budget for Gemini slots, in tokens; -1 lets the model decide.
-#                   UNSET BY DEFAULT, so Gemini runs at whatever effort the model defaults to and
-#                   nothing is billed for thinking. Set it only if you have measured that it earns
-#                   its cost on your diffs - published scores for a "(high)" configuration of a
-#                   model are not evidence about the default one.
+#                   UNSET BY DEFAULT, which does NOT mean "no thinking": current Gemini models think
+#                   on their own, and you are already billed for it. Measured on gemini-flash-latest
+#                   with no thinkingConfig at all: ~1,167 thinking tokens per review call, against
+#                   ~524 tokens of actual review. This variable sets the BUDGET for thinking that is
+#                   happening either way. Set it only if you have measured that a larger budget earns
+#                   its cost on your diffs - a published score for a "(high)" configuration of a
+#                   model is not evidence about the default one.
 #                   "off"/"none"/"any", or unset, send NO thinkingConfig at all. "0" is different:
 #                   it sends an explicit thinkingBudget of 0, which asks the model to disable
 #                   thinking. Same intent, different request - use the words unless you specifically
