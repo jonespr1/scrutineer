@@ -48,9 +48,11 @@ check() { # description  jq_filter  expected  [env assignments...]
   fi
 }
 
-# --- Privacy posture is unconditional ----------------------------------------------------------
+# --- Privacy posture: deny/zdr by default, opt-out only via explicit variables ----------------
 # These do not come from any host list, which is the whole argument for dropping the allow-list.
-check 'data_collection is always deny'  '.provider.data_collection' '"deny"'
+check 'data_collection denies by default'   '.provider.data_collection' '"deny"'
+check 'data_collection allow is honoured'    '.provider.data_collection' '"allow"' OPENROUTER_DATA_COLLECTION=allow
+check 'invalid data_collection -> deny'      '.provider.data_collection' '"deny"'  OPENROUTER_DATA_COLLECTION=maybe
 check 'zdr on by default'               '.provider.zdr'             'true'
 check 'zdr can be disabled explicitly'  '.provider.zdr'             'null' OPENROUTER_ZDR=false
 

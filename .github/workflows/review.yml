@@ -49,13 +49,16 @@
 #                        under it). Premium models (anthropic/*, openai/*) exceed it - set "none" for those.
 #   OPENROUTER_ZDR       zero-data-retention hosts only. Default: true. Set "false" to allow
 #                        non-ZDR hosts (needed for models that have no ZDR host on OpenRouter).
+#   OPENROUTER_DATA_COLLECTION  deny (default) | allow. "allow" permits providers that train on your
+#                        prompts (free "stealth"/preview models). Only for non-proprietary code.
 #
 # KEYS (repo Secrets; the caller passes exactly these two explicitly - not `secrets: inherit`):
 #   GEMINI_API_KEY       for direct Gemini slots      (https://aistudio.google.com/)
 #   OPENROUTER_API_KEY   for OpenRouter slots         (https://openrouter.ai/)
 #
-# By default OpenRouter requests set data_collection:"deny" AND zero data retention, so hosts
-# neither train on nor retain your code. Set OPENROUTER_ZDR=false to relax retention if needed.
+# By default OpenRouter requests set data_collection:"deny" AND zero data retention, so hosts neither
+# train on nor retain your code. Set OPENROUTER_ZDR=false to relax retention, or
+# OPENROUTER_DATA_COLLECTION=allow to permit training (only on non-proprietary code).
 name: 'Scrutineer (reusable)'
 
 on:
@@ -109,6 +112,7 @@ jobs:
           OPENROUTER_IGNORE: '${{ vars.OPENROUTER_IGNORE }}'
           OPENROUTER_MAXTOKENS: '${{ vars.OPENROUTER_MAXTOKENS }}'
           OPENROUTER_ZDR: '${{ vars.OPENROUTER_ZDR }}'
+          OPENROUTER_DATA_COLLECTION: '${{ vars.OPENROUTER_DATA_COLLECTION }}'
           CONTEXT_BUDGET: '${{ vars.CONTEXT_BUDGET }}'
           REPO: '${{ github.repository }}'
           PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
@@ -377,10 +381,15 @@ jobs:
             printf '%s' "$text"
           }
           call_openrouter() {
-            local model="$1" req resp text err base prov sort http rc fr why pt ct cost host timeout=600 HOSTS IGN MP mp_re MT MT_DEFAULT
+            local model="$1" req resp text err base prov sort http rc fr why pt ct cost host timeout=600 HOSTS IGN MP mp_re MT MT_DEFAULT DC
             if [ -z "${OPENROUTER_API_KEY:-}" ]; then printf '⚠️ OPENROUTER_API_KEY is not set for this repo.'; return; fi
             sort="${OPENROUTER_SORT:-throughput}"
-            base="$(jq -n --arg s "$sort" '{data_collection:"deny", sort:$s, allow_fallbacks:true}')"
+            # Data collection is DENIED by default (no provider may train on your code). A repo may set
+            # OPENROUTER_DATA_COLLECTION=allow to permit data-collecting providers - e.g. free "stealth"/
+            # preview models that pay for themselves by training on prompts. Only sensible on
+            # non-proprietary code; anything but "allow" falls back to "deny" (fail safe).
+            DC="${OPENROUTER_DATA_COLLECTION:-deny}"; [ "$DC" = allow ] || DC=deny
+            base="$(jq -n --arg s "$sort" --arg dc "$DC" '{data_collection:$dc, sort:$s, allow_fallbacks:true}')"
             # No allow-list by DEFAULT. A hand-maintained "only" list silently rots: it cannot know
             # when a provider stops serving a model (our old default named a host that does not serve
             # minimax-m3 at all) and it excludes every provider added after it was written, including
