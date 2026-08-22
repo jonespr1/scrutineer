@@ -7,6 +7,18 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
 
 ## v1.5.0 (pending)
 
+### Fixed
+- **npm's lockfile was being sent to the model in full, on every dependency PR.** The full-file
+  context skips lockfiles by extension — `*.lock` catches yarn, Cargo, poetry and composer — but
+  **`package-lock.json` ends in `.json`, so it never matched.** The estate is npm, so in practice the
+  most common lockfile of all was handed to every reviewer in its entirety. Two consequences, both
+  observed: it exhausted `CONTEXT_BUDGET`, so genuinely changed source files were dropped from the
+  context with only a footnote; and the resulting prompt was large enough to push reviewers into
+  timeouts (`SimplerHR-Stour#44`, GLM at 600s) and output-limit failures (`finish_reason=length`,
+  where the whole budget goes on reasoning and you are billed for an empty review). Now also skips
+  `*-lock.json`, `*-lock.yaml`, `npm-shrinkwrap.json` and `bun.lockb`. **This affects every repo on
+  upgrade and needs no configuration.**
+
 ### Added
 - **`DIFF_EXCLUDE`** — comma-separated globs of paths to keep out of the review, e.g.
   `"package-lock.json,*.lock,benchmark/results/*"`. **Empty by default**, so nothing changes until a

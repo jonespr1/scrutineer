@@ -161,5 +161,33 @@ else
   printf 'FAIL  %s\n' 'context loop no longer calls path_excluded - exclusions would not reach CONTEXT_BUDGET'; fails=1
 fi
 
+# --- The built-in binary/generated skip list -------------------------------------------------------
+# Separate from DIFF_EXCLUDE: this list ships on by default and is what stops a lockfile's FULL
+# CONTENT reaching the model. It read as "lockfiles are handled" while missing npm's - which is named
+# package-lock.json and so does not match *.lock. The estate is npm, so in practice the most common
+# lockfile of all was being sent in full on every dependency PR, exhausting CONTEXT_BUDGET (dropping
+# real changed files from context) and driving reviewers into timeouts and output-limit failures.
+# Extracted from the workflow so the list under test is the one that ships.
+SKIP_CASE="$(grep -o 'case "\$f" in [^)]*)' "$WF" | head -1)"
+[ -n "$SKIP_CASE" ] || { echo "FAIL: could not extract the context skip list from $WF" >&2; exit 1; }
+skips() { # $1 = path -> "skip"/"send"
+  eval "case \"$1\" in ${SKIP_CASE#case \"\$f\" in } echo skip ;; *) echo send ;; esac"
+}
+skip_is() { # description  path  expected
+  local got; got="$(skips "$2")"
+  if [ "$got" = "$3" ]; then printf 'ok    %s\n' "$1"
+  else printf 'FAIL  %s\n        path=%s got=%s want=%s\n' "$1" "$2" "$got" "$3"; fails=1; fi
+}
+skip_is 'npm lockfile is not sent in full'    package-lock.json    skip
+skip_is 'pnpm lockfile is not sent in full'   pnpm-lock.yaml       skip
+skip_is 'npm shrinkwrap is not sent in full'  npm-shrinkwrap.json  skip
+skip_is 'yarn lockfile still skipped'         yarn.lock            skip
+skip_is 'cargo lockfile still skipped'        Cargo.lock           skip
+skip_is 'binary assets still skipped'         logo.png             skip
+# The guard that matters most: the list must not start swallowing source.
+skip_is 'source is still sent'                src/app.ts           send
+skip_is 'config json is still sent'           tsconfig.json        send
+skip_is 'a file merely containing "lock"'     src/lockManager.ts   send
+
 [ "$fails" -eq 0 ] && echo "All exclude tests passed." || echo "Some exclude tests FAILED." >&2
 exit "$fails"

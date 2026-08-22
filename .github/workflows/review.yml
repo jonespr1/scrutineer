@@ -285,7 +285,15 @@ jobs:
           mapfile -t CHANGED < <(printf '%s' "$CHANGED_JSON" | jq -r 'sort_by(-.changes)[] | select(.status != "removed") | .filename' 2>/dev/null || true)
           for f in "${CHANGED[@]:-}"; do
             [ -z "$f" ] && continue
-            case "$f" in *.png|*.jpg|*.jpeg|*.gif|*.ico|*.svg|*.pdf|*.zip|*.gz|*.tar|*.woff|*.woff2|*.ttf|*.eot|*.mp3|*.mp4|*.wav|*.lock|*.min.js|*.min.css) continue ;; esac
+            # Lockfiles: the FULL CONTENT of one is never useful to a reviewer and routinely runs to
+            # hundreds of KB. "*.lock" caught yarn/Cargo/poetry/composer but MISSED npm's, which is
+            # named package-lock.json and so ends in .json - the single most common lockfile in the
+            # estate. The effect was that any npm dependency PR handed the model an entire lockfile,
+            # exhausting CONTEXT_BUDGET so real changed files were dropped from context, and driving
+            # the input large enough to time reviewers out or burn their whole output budget on
+            # reasoning. Observed on SimplerHR-Stour#44 (GLM timed out at 600s) and
+            # Sell-Faster-on-eBay#47. The *-lock.json / *-lock.yaml patterns generalise it.
+            case "$f" in *.png|*.jpg|*.jpeg|*.gif|*.ico|*.svg|*.pdf|*.zip|*.gz|*.tar|*.woff|*.woff2|*.ttf|*.eot|*.mp3|*.mp4|*.wav|*.lock|*-lock.json|*-lock.yaml|npm-shrinkwrap.json|bun.lockb|*.min.js|*.min.css) continue ;; esac
             # DIFF_EXCLUDE applies here too. Excluding a file from the diff but still sending its
             # full content would leave it consuming CONTEXT_BUDGET - the fix would only half work,
             # and on a lockfile the content is far bigger than its diff.
