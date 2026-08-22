@@ -18,6 +18,13 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
 
   Supersedes Dependabot #21 and #22, which bumped the versions but left the two tag pins as tags.
 
+  The guard matches *every* `uses:` line and then subtracts the forms that cannot carry a SHA
+  (`./local` paths, `docker://` images, setup.ps1's `{{REF}}` placeholder, commented-out lines), so
+  a reference in a shape nobody anticipated fails loudly instead of going unexamined. It covers
+  `.github/workflows/`, `examples/` and `setup.ps1`, and fails if it ever stops seeing `review.yml`
+  — a scan that silently matches nothing is worse than no scan. `release.yml` uses no third-party
+  actions at all, so the estate's entire action surface is now pinned.
+
   The one deliberate exception is scrutineer's own dogfood caller, which stays on
   `jonespr1/scrutineer/...@v1` — the moving major alias *is* the distribution mechanism, and pinning
   it to a SHA is precisely the failure the estate's Dependabot ignore rules exist to prevent.
