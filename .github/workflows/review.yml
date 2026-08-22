@@ -58,8 +58,9 @@
 #                        ALPHABETICAL file order, so one big generated file pushes real code past
 #                        the end - reviewed confidently on a partial payload, at full token cost.
 #                        Excluding by path fixes that; raising the cap only moves it. Applies to the
-#                        full-file context too. Excluded files still appear in the changed-files
-#                        list, and the review says how many were held back. These are shell `case`
+#                        full-file context too. The prompt names what was withheld, so the model
+#                        cannot mistake an excluded file for an unchanged one, and the posted review
+#                        says how many were held back. These are shell `case`
 #                        globs, so `*` matches `/` as well: "dir/*" covers everything beneath it,
 #                        and `[` opens a character class - a literal one needs "[[]".
 #
@@ -212,8 +213,10 @@ jobs:
           # DIFF_EXCLUDE is comma-separated shell globs matched against the path. These are `case`
           # patterns, NOT gitignore: `*` matches `/` too, so "benchmark/results/*" covers everything
           # beneath it and "*.lock" matches at any depth. Empty by default - no repo changes
-          # behaviour until it opts in. Excluded files are still listed in the changed-files list
-          # sent to the model, so it knows they changed and simply was not shown them.
+          # behaviour until it opts in. The excluded paths are named in the prompt below, so the
+          # model is told they changed and was not shown them, rather than inferring from silence -
+          # which is the same trap this feature exists to close, aimed at the model instead of the
+          # reader.
           EXPATS=()
           [ -n "${DIFF_EXCLUDE:-}" ] && IFS=',' read -r -a EXPATS <<< "$DIFF_EXCLUDE"
           path_excluded() {
@@ -385,6 +388,14 @@ jobs:
 
           Current unified diff to review:
           ${DIFF}"
+          if [ -n "$EXCLUDED_PATHS" ]; then
+            PROMPT="${PROMPT}
+
+          These changed files were deliberately withheld from the diff and file context above by this
+          repo's DIFF_EXCLUDE setting (typically lockfiles or generated output). They DID change in
+          this PR. Do not infer anything from their absence, and do not report them as unchanged:
+          ${EXCLUDED_PATHS}"
+          fi
           if [ -n "$FILES_CTX" ]; then
             PROMPT="${PROMPT}
 

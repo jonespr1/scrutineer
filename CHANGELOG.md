@@ -22,10 +22,10 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
 ### Added
 - **`DIFF_EXCLUDE`** — comma-separated globs of paths to keep out of the review, e.g.
   `"package-lock.json,*.lock,benchmark/results/*"`. **Empty by default**, so nothing changes until a
-  repo opts in. Also applies to the full-file context, and excluded files still appear in the
-  changed-files list so the reviewer knows they changed and simply wasn't shown them. The review
-  reports how many were held back — silently dropping code from a review would be the same class of
-  failure this fixes.
+  repo opts in. Also applies to the full-file context. The excluded paths are named in the prompt,
+  so the model is told those files changed and were withheld rather than inferring from silence, and
+  the posted review reports how many were held back — a reviewer misled by absence is the same class
+  of failure this fixes, so neither the model nor the reader is left to guess.
 
   **Why it exists.** The diff is capped at 200,000 characters and truncated in GitHub's
   *alphabetical* file order, so one large generated file pushes real code past the end. The reviewer
