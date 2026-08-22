@@ -135,5 +135,31 @@ case "$body" in *'package-lock.json'*) printf 'FAIL  %s\n' 'excluded section ful
   *) printf 'ok    %s\n' 'excluded section fully removed' ;;
 esac
 
+# --- The FULL-FILE CONTEXT side ------------------------------------------------------------------
+# Excluding a file from the diff while still sending its full content would only half-fix the
+# problem - and for a lockfile the content dwarfs the diff. The context loop calls the same
+# path_excluded, so test the function directly, and separately assert the call site still exists:
+# the function could keep passing its own tests while the loop quietly stopped calling it.
+pe() { # $1 = DIFF_EXCLUDE, $2 = path -> "yes"/"no"
+  DIFF_EXCLUDE="$1" DIFF="" bash -c '{ '"$SRC"'
+    } >/dev/null 2>&1
+    path_excluded "'"$2"'" && echo yes || echo no' 2>/dev/null
+}
+pe_is() { # description  exclude  path  expected
+  local got; got="$(pe "$2" "$3")"
+  if [ "$got" = "$4" ]; then printf 'ok    %s\n' "$1"
+  else printf 'FAIL  %s\n        path=%s exclude=%s got=%s want=%s\n' "$1" "$3" "$2" "$got" "$4"; fails=1; fi
+}
+pe_is 'context: lockfile excluded'      'package-lock.json'   'package-lock.json'            yes
+pe_is 'context: nested under a dir glob' 'benchmark/results/*' 'benchmark/results/r1/raw/a.json' yes
+pe_is 'context: code file kept'         'package-lock.json'   'src/app.ts'                   no
+pe_is 'context: nothing excluded when unset' ''               'package-lock.json'            no
+
+if grep -q 'path_excluded "$f" && continue' "$WF"; then
+  printf 'ok    %s\n' 'context loop still calls path_excluded'
+else
+  printf 'FAIL  %s\n' 'context loop no longer calls path_excluded - exclusions would not reach CONTEXT_BUDGET'; fails=1
+fi
+
 [ "$fails" -eq 0 ] && echo "All exclude tests passed." || echo "Some exclude tests FAILED." >&2
 exit "$fails"

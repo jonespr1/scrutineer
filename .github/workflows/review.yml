@@ -60,7 +60,8 @@
 #                        Excluding by path fixes that; raising the cap only moves it. Applies to the
 #                        full-file context too. Excluded files still appear in the changed-files
 #                        list, and the review says how many were held back. These are shell `case`
-#                        globs, so `*` matches `/` as well: "dir/*" covers everything beneath it.
+#                        globs, so `*` matches `/` as well: "dir/*" covers everything beneath it,
+#                        and `[` opens a character class - a literal one needs "[[]".
 #
 #   OPENROUTER_DATA_COLLECTION  deny (default) | allow. "allow" permits providers that train on your
 #                        prompts (free "stealth"/preview models). Only for non-proprietary code.
@@ -243,6 +244,11 @@ jobs:
             # the filter unnoticed. ENVIRON is taken verbatim.
             DIFF="$(printf '%s\n' "$DIFF" | EXCL="$EXCLUDED_PATHS" awk '
               BEGIN { n = split(ENVIRON["EXCL"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }
+              # Assumes no path contains " b/": the .* is greedy, so "a/x b/y.txt b/x b/y.txt"
+              # extracts "y.txt". Harmless because the sed above derives its key the same way, so
+              # both sides agree and the file simply is not excluded - never the wrong file. Left as
+              # is rather than rewritten: a correct parser for that case is more fragile than the
+              # case is likely, and this code is under test.
               /^diff --git / { p = $0; sub(/^diff --git a\/.* b\//, "", p); skip = (p in drop) }
               !skip')"
             echo "DIFF_EXCLUDE dropped ${n_excl} file(s) from the diff: ${before} -> ${#DIFF} chars."
