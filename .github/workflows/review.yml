@@ -52,6 +52,18 @@
 #                        under it). Premium models (anthropic/*, openai/*) exceed it - set "none" for those.
 #   OPENROUTER_ZDR       zero-data-retention hosts only. Default: true. Set "false" to allow
 #                        non-ZDR hosts (needed for models that have no ZDR host on OpenRouter).
+#   DIFF_EXCLUDE         Comma-separated globs of paths to keep OUT of the review, e.g.
+#                        "package-lock.json,*.lock,benchmark/results/*". EMPTY BY DEFAULT.
+#                        The diff is capped at 200,000 characters and truncated in GitHub's
+#                        ALPHABETICAL file order, so one big generated file pushes real code past
+#                        the end - reviewed confidently on a partial payload, at full token cost.
+#                        Excluding by path fixes that; raising the cap only moves it. Applies to the
+#                        full-file context too. The prompt names what was withheld, so the model
+#                        cannot mistake an excluded file for an unchanged one, and the posted review
+#                        says how many were held back. These are shell `case`
+#                        globs, so `*` matches `/` as well: "dir/*" covers everything beneath it,
+#                        and `[` opens a character class - a literal one needs "[[]".
+#
 #   OPENROUTER_DATA_COLLECTION  deny (default) | allow. "allow" permits providers that train on your
 #                        prompts (free "stealth"/preview models). Only for non-proprietary code.
 #
@@ -116,6 +128,7 @@ jobs:
           OPENROUTER_MAXTOKENS: '${{ vars.OPENROUTER_MAXTOKENS }}'
           OPENROUTER_ZDR: '${{ vars.OPENROUTER_ZDR }}'
           OPENROUTER_DATA_COLLECTION: '${{ vars.OPENROUTER_DATA_COLLECTION }}'
+          DIFF_EXCLUDE: '${{ vars.DIFF_EXCLUDE }}'
           CONTEXT_BUDGET: '${{ vars.CONTEXT_BUDGET }}'
           REPO: '${{ github.repository }}'
           PR_NUMBER: '${{ github.event.pull_request.number || github.event.issue.number }}'
@@ -187,6 +200,74 @@ jobs:
             exit 1
           fi
           if [ -z "$DIFF" ]; then echo "Empty diff; nothing to review."; exit 0; fi
+          # 1a) Path exclusions, applied BEFORE the size cap below - which is the entire point.
+          # The cap truncates the diff by raw CHARACTER COUNT in GitHub's ALPHABETICAL file order, so
+          # one large generated file silently pushes real code past the end. The reviewer then says so
+          # in one line of small print and reviews confidently on what it did get, while you pay for
+          # every token it read. Measured on this repo's own PR #24: a 353,605-char diff against a
+          # 200,000 cap, where 111 committed benchmark artifacts sat alphabetically between
+          # manifest.json and run.sh - so run.sh, both test suites and scorecard.json were never in
+          # the payload, for ~$0.36 of reviewer spend. Excluding by path removes the cause; raising
+          # the cap only moves it, and costs more.
+          #
+          # DIFF_EXCLUDE is comma-separated shell globs matched against the path. These are `case`
+          # patterns, NOT gitignore: `*` matches `/` too, so "benchmark/results/*" covers everything
+          # beneath it and "*.lock" matches at any depth. Empty by default - no repo changes
+          # behaviour until it opts in. The excluded paths are named in the prompt below, so the
+          # model is told they changed and was not shown them, rather than inferring from silence -
+          # which is the same trap this feature exists to close, aimed at the model instead of the
+          # reader.
+          EXPATS=()
+          [ -n "${DIFF_EXCLUDE:-}" ] && IFS=',' read -r -a EXPATS <<< "$DIFF_EXCLUDE"
+          path_excluded() {
+            local pth="$1" pat
+            for pat in ${EXPATS[@]+"${EXPATS[@]}"}; do
+              pat="${pat#"${pat%%[![:space:]]*}"}"; pat="${pat%"${pat##*[![:space:]]}"}"
+              [ -n "$pat" ] || continue
+              # shellcheck disable=SC2254  # unquoted deliberately: $pat IS the glob to match against
+              case "$pth" in $pat) return 0 ;; esac
+            done
+            return 1
+          }
+          EXCLUDED_PATHS=""
+          if [ "${#EXPATS[@]}" -gt 0 ]; then
+            while IFS= read -r pth; do
+              [ -n "$pth" ] || continue
+              path_excluded "$pth" && EXCLUDED_PATHS="${EXCLUDED_PATHS}${pth}"$'\n'
+            done < <(printf '%s\n' "$DIFF" | sed -n 's|^diff --git a/.* b/||p')
+          fi
+          EXCL_NOTE=""
+          if [ -n "$EXCLUDED_PATHS" ]; then
+            n_excl="$(printf '%s' "$EXCLUDED_PATHS" | grep -c . || true)"
+            before=${#DIFF}
+            # Drop whole `diff --git` sections whose path matched. Bash did the globbing (correct
+            # shell semantics); awk only does the set lookup.
+            # Passed via ENVIRON, not -v: awk processes backslash escapes in a -v assignment, so a
+            # path containing a literal backslash followed by n/t/... would be mis-keyed and survive
+            # the filter unnoticed. ENVIRON is taken verbatim.
+            DIFF="$(printf '%s\n' "$DIFF" | EXCL="$EXCLUDED_PATHS" awk '
+              BEGIN { n = split(ENVIRON["EXCL"], a, "\n"); for (i = 1; i <= n; i++) if (a[i] != "") drop[a[i]] = 1 }
+              # Assumes no path contains " b/": the .* is greedy, so "a/x b/y.txt b/x b/y.txt"
+              # extracts "y.txt". Harmless because the sed above derives its key the same way, so
+              # both sides agree and the file simply is not excluded - never the wrong file. Left as
+              # is rather than rewritten: a correct parser for that case is more fragile than the
+              # case is likely, and this code is under test.
+              /^diff --git / { p = $0; sub(/^diff --git a\/.* b\//, "", p); skip = (p in drop) }
+              !skip')"
+            echo "DIFF_EXCLUDE dropped ${n_excl} file(s) from the diff: ${before} -> ${#DIFF} chars."
+            EXCL_NOTE="$(printf '\n\n> Note: %s changed file(s) were excluded from the diff by DIFF_EXCLUDE and were not reviewed.' "$n_excl")"
+          fi
+
+          # The "Empty diff" guard above runs BEFORE exclusions, so it cannot catch this: a pattern
+          # broad enough to match every changed file (say "*", or "*.ts" on a TypeScript-only PR)
+          # leaves nothing behind and the run would otherwise continue into a paid model call with an
+          # empty diff and empty context, posting a baffled "I see no changes" review. Exit green -
+          # nothing to review is a success, exactly as it is for a genuinely empty diff.
+          if [ -n "$EXCLUDED_PATHS" ] && [ -z "${DIFF//[[:space:]]/}" ]; then
+            echo "All ${n_excl} changed file(s) matched DIFF_EXCLUDE; nothing left to review."
+            exit 0
+          fi
+
           MAX=200000
           TRUNC_NOTE=""
           if [ "${#DIFF}" -gt "$MAX" ]; then
@@ -207,7 +288,19 @@ jobs:
           mapfile -t CHANGED < <(printf '%s' "$CHANGED_JSON" | jq -r 'sort_by(-.changes)[] | select(.status != "removed") | .filename' 2>/dev/null || true)
           for f in "${CHANGED[@]:-}"; do
             [ -z "$f" ] && continue
-            case "$f" in *.png|*.jpg|*.jpeg|*.gif|*.ico|*.svg|*.pdf|*.zip|*.gz|*.tar|*.woff|*.woff2|*.ttf|*.eot|*.mp3|*.mp4|*.wav|*.lock|*.min.js|*.min.css) continue ;; esac
+            # Lockfiles: the FULL CONTENT of one is never useful to a reviewer and routinely runs to
+            # hundreds of KB. "*.lock" caught yarn/Cargo/poetry/composer but MISSED npm's, which is
+            # named package-lock.json and so ends in .json - the single most common lockfile in the
+            # estate. The effect was that any npm dependency PR handed the model an entire lockfile,
+            # exhausting CONTEXT_BUDGET so real changed files were dropped from context, and driving
+            # the input large enough to time reviewers out or burn their whole output budget on
+            # reasoning. Observed on SimplerHR-Stour#44 (GLM timed out at 600s) and
+            # Sell-Faster-on-eBay#47. The *-lock.json / *-lock.yaml patterns generalise it.
+            case "$f" in *.png|*.jpg|*.jpeg|*.gif|*.ico|*.svg|*.pdf|*.zip|*.gz|*.tar|*.woff|*.woff2|*.ttf|*.eot|*.mp3|*.mp4|*.wav|*.lock|*-lock.json|*-lock.yaml|npm-shrinkwrap.json|bun.lockb|*.min.js|*.min.css) continue ;; esac
+            # DIFF_EXCLUDE applies here too. Excluding a file from the diff but still sending its
+            # full content would leave it consuming CONTEXT_BUDGET - the fix would only half work,
+            # and on a lockfile the content is far bigger than its diff.
+            path_excluded "$f" && continue
             # URL-encode the path (preserving slashes) so paths with spaces resolve; strip any invalid
             # UTF-8 (a binary file with an unlisted extension) so it can never break the JSON encode.
             f_enc="$(printf '%s' "$f" | jq -sRr @uri | sed 's/%2F/\//g')"
@@ -295,6 +388,14 @@ jobs:
 
           Current unified diff to review:
           ${DIFF}"
+          if [ -n "$EXCLUDED_PATHS" ]; then
+            PROMPT="${PROMPT}
+
+          These changed files were deliberately withheld from the diff and file context above by this
+          repo's DIFF_EXCLUDE setting (typically lockfiles or generated output). They DID change in
+          this PR. Do not infer anything from their absence, and do not report them as unchanged:
+          ${EXCLUDED_PATHS}"
+          fi
           if [ -n "$FILES_CTX" ]; then
             PROMPT="${PROMPT}
 
@@ -356,10 +457,10 @@ jobs:
             if [ -z "$text" ]; then
               # Report the actual cause, never a bare "no response".
               err="$(printf '%s' "$resp" | jq -r '.error.message // empty' 2>/dev/null)"
-              if   [ "$rc" = 28 ];           then why="Gemini did not respond within ${timeout}s (the diff may be too large; try gemini-flash-latest or a smaller PR)"
+              if   [ "$rc" = 28 ];           then why="Gemini did not respond within ${timeout}s. This is a SPEED limit, not an output limit. The payload was ${#PROMPT} characters - of which the full-file context is usually the larger part, so lower CONTEXT_BUDGET (or set DIFF_EXCLUDE) before assuming the diff is at fault. A smaller PR or gemini-flash-latest also helps."
               elif [ "$rc" != 0 ];           then why="could not reach the Gemini API (curl exit $rc)"
               elif [ -n "$err" ];            then why="Gemini API error${http:+ (HTTP $http)}: $err"
-              elif [ "$fr" = "MAX_TOKENS" ]; then why="the model hit its output limit before finishing the review (finishReason=MAX_TOKENS); Gemini has no equivalent of OPENROUTER_MAXTOKENS - reduce the diff size or CONTEXT_BUDGET"
+              elif [ "$fr" = "MAX_TOKENS" ]; then why="the model hit its output limit before finishing the review (finishReason=MAX_TOKENS); Gemini has no equivalent of OPENROUTER_MAXTOKENS, so the payload is the only lever - it was ${#PROMPT} characters. Lower CONTEXT_BUDGET, set DIFF_EXCLUDE, or split the PR."
               elif [ -n "$fr" ];             then why="no review returned (finishReason=$fr - e.g. a SAFETY or RECITATION block)"
               elif [ -n "$http" ] && [ "$http" != 200 ]; then why="HTTP $http from the Gemini API"
               else                                why="empty response from the Gemini API (HTTP ${http:-unknown})"
@@ -383,6 +484,45 @@ jobs:
             [ -n "${SLOT_META:-}" ] && printf '%s %s na na\n' "${pt:-0}" "${ct:-0}" > "$SLOT_META"
             printf '%s' "$text"
           }
+          # Which output ceiling actually bound this call? OPENROUTER_MAXTOKENS and the curl -m
+          # timeout are BOTH ceilings on output, and on any given call only one of them is real.
+          # Telling someone to "raise OPENROUTER_MAXTOKENS" when the TIMEOUT is the binding
+          # constraint is worse than unhelpful: the larger cap lets the model run past the old
+          # limit and into the timeout, and a timeout posts NOTHING where the cap at least posts a
+          # partial review with a banner. The advice would cost you the review it claims to save.
+          #
+          # Measured on ba-verify-line#320: minimax hit the cap while ox-alpha timed out, same
+          # commit, same 205k-token payload - the two outcomes differ only by host throughput. A
+          # static string cannot tell those apart, so the remedy is derived rather than asserted:
+          # extrapolate what this host could emit inside the window from what it just did.
+          #
+          # Reads $el, $timeout, $MT and $resp from the calling function - bash is dynamically
+          # scoped, and this is only ever called from call_openrouter after the request returns.
+          cap_advice() {
+            local pt_in tps win
+            pt_in="$(printf '%s' "$resp" | jq -r '.usage.prompt_tokens // 0' 2>/dev/null || echo 0)"
+            case "$pt_in" in ''|*[!0-9]*) pt_in=0 ;; esac
+            local sz=""
+            [ "$pt_in" -gt 0 ] && sz=" This prompt was ${pt_in} tokens (the payload ceiling is the 200,000-char diff cap plus CONTEXT_BUDGET)."
+            # No cap set, so the model stopped on its own limit; only the payload is ours to change.
+            if [ -z "${MT:-}" ]; then
+              printf 'No OPENROUTER_MAXTOKENS is set, so the model stopped on its own output limit - reduce the payload (DIFF_EXCLUDE, a lower CONTEXT_BUDGET, or a smaller PR).%s' "$sz"
+              return
+            fi
+            tps=$(( MT / el ))
+            win=$(( tps * timeout ))
+            # Under 20%% headroom means the window, not the cap, is what stopped it. The margin is a
+            # judgement call, not a derived constant: at MT=32000 and a 600s timeout it flips at
+            # ~500s elapsed, which is late enough that a bigger cap would almost certainly land in
+            # the timeout. It errs toward "do not raise", because that failure is asymmetric - a cap
+            # left too low costs a longer review, a cap raised into the timeout costs the whole one.
+            if [ "$win" -lt $(( MT * 12 / 10 )) ]; then
+              printf 'Raising OPENROUTER_MAXTOKENS will NOT help and will likely make this worse: at the observed ~%s tok/s this host can only emit ~%s tokens inside the %ss call timeout, so a higher cap ends in a timeout - which posts no review at all - rather than a longer review. Reduce the payload instead (DIFF_EXCLUDE, a lower CONTEXT_BUDGET, or a smaller PR), or allow a faster host with a higher OPENROUTER_MAXPRICE.%s' "$tps" "$win" "$timeout" "$sz"
+            else
+              printf 'Raising OPENROUTER_MAXTOKENS should help here: at the observed ~%s tok/s this host could emit ~%s tokens within the %ss timeout, well above the current %s.%s' "$tps" "$win" "$timeout" "$MT" "$sz"
+            fi
+          }
+
           call_openrouter() {
             local model="$1" req resp text err base prov sort http rc fr why pt ct cost host timeout=600 HOSTS IGN MP mp_re MT MT_DEFAULT DC
             if [ -z "${OPENROUTER_API_KEY:-}" ]; then printf '⚠️ OPENROUTER_API_KEY is not set for this repo.'; return; fi
@@ -460,7 +600,9 @@ jobs:
                      --argjson mt "${MT:-null}" \
                      '{model:$m, messages:[{role:"user",content:.}], provider:$prov, usage:{include:true}}
                       + (if $mt == null then {} else {max_tokens:$mt} end)')"
+            el0=$SECONDS
             rc=0; resp="$(printf '%s' "$req" | curl -sS -m "$timeout" -w '\n__HTTP__%{http_code}' "https://openrouter.ai/api/v1/chat/completions" -H "Authorization: Bearer ${OPENROUTER_API_KEY}" -H 'Content-Type: application/json' -H 'HTTP-Referer: https://github.com' -H 'X-Title: Scrutineer' --data-binary @-)" || rc=$?
+            el=$(( SECONDS - el0 )); [ "$el" -lt 1 ] && el=1
             http=""; case "$resp" in *__HTTP__*) http="${resp##*__HTTP__}"; resp="${resp%__HTTP__*}"; resp="${resp%$'\n'}";; esac
             text="$(printf '%s' "$resp" | jq -r '.choices[0].message.content // empty' 2>/dev/null)"
             fr="$(printf '%s' "$resp" | jq -r '.choices[0].finish_reason // empty' 2>/dev/null)"
@@ -487,10 +629,10 @@ jobs:
             if [ -z "$text" ]; then
               # Report the actual cause, never a bare "no response".
               err="$(printf '%s' "$resp" | jq -r '.error.message // empty' 2>/dev/null)"
-              if   [ "$rc" = 28 ];         then why="the model did not respond within ${timeout}s (raise OPENROUTER_MAXPRICE to allow faster hosts, or reduce the diff size / CONTEXT_BUDGET)"
+              if   [ "$rc" = 28 ];         then why="the model did not respond within ${timeout}s. This is a SPEED limit, not an output limit - raising OPENROUTER_MAXTOKENS cannot fix it and makes it likelier. The payload was ${#PROMPT} characters; reduce it (DIFF_EXCLUDE, a lower CONTEXT_BUDGET, or a smaller PR) or allow a faster host with a higher OPENROUTER_MAXPRICE."
               elif [ "$rc" != 0 ];         then why="could not reach OpenRouter (curl exit $rc)"
               elif [ -n "$err" ];          then why="OpenRouter error${http:+ (HTTP $http)}: $err"
-              elif [ "$fr" = "length" ];   then why="the model hit its output limit before finishing the review (finish_reason=length) - raise OPENROUTER_MAXTOKENS (currently ${MT:-none})"
+              elif [ "$fr" = "length" ];   then why="the model hit its output limit before finishing the review (finish_reason=length, limit ${MT:-none}). $(cap_advice)"
               elif [ -n "$fr" ];           then why="no review content returned (finish_reason=$fr, HTTP ${http:-unknown})"
               elif [ -n "$http" ] && [ "$http" != 200 ]; then why="HTTP $http from OpenRouter"
               else                              why="empty response from OpenRouter (HTTP ${http:-unknown}) - likely no host matched the current routing constraints (OPENROUTER_HOSTS / OPENROUTER_ZDR / OPENROUTER_MAXPRICE)"
@@ -501,7 +643,7 @@ jobs:
               # when content was empty, so a review cut off partway through was posted looking
               # complete - and one cut off before its Findings section silently loses findings you
               # were billed for. Keep the partial review (it still has value) and say it stopped.
-              text="$(printf '%s\n\n---\n\n⚠️ **This review was cut off before it finished** (`finish_reason=length`, limit %s). Anything past the cut is missing, including findings it had not reached - do not read the absence of a finding as a pass. Re-run with a higher `OPENROUTER_MAXTOKENS`, or a smaller diff / `CONTEXT_BUDGET`.' "$text" "${MT:-none}")"
+              text="$(printf '%s\n\n---\n\n⚠️ **This review was cut off before it finished** (`finish_reason=length`, limit %s). Anything past the cut is missing, including findings it had not reached - do not read the absence of a finding as a pass.\n\n%s' "$text" "${MT:-none}" "$(cap_advice)")"
             fi
             # Telemetry: tokens + OpenRouter's real USD cost (usage.include:true above).
             pt="$(printf '%s' "$resp" | jq -r '.usage.prompt_tokens // 0' 2>/dev/null || echo 0)"
@@ -526,7 +668,7 @@ jobs:
             # detect that this slot already reviewed this exact commit (see already_reviewed).
             # Marker also carries per-review telemetry (latency, tokens, real cost) so a trial can be
             # aggregated straight from the PR comments - Gemini included (it is not in OpenRouter billing).
-            body="$(printf '## 🤖 Review - `%s`\n\n%s%s\n\n<sub>Automated review - not a substitute for human review.</sub>\n<!-- scrutineer sha=%s lat=%ss in=%s out=%s cost=%s host=%s -->' "$1" "$2" "$TRUNC_NOTE" "${HEAD_SHA:-none}" "${3:-0}" "${4:-0}" "${5:-0}" "${6:-na}" "${7:-na}")"
+            body="$(printf '## 🤖 Review - `%s`\n\n%s%s\n\n<sub>Automated review - not a substitute for human review.</sub>\n<!-- scrutineer sha=%s lat=%ss in=%s out=%s cost=%s host=%s -->' "$1" "$2" "${EXCL_NOTE}${TRUNC_NOTE}" "${HEAD_SHA:-none}" "${3:-0}" "${4:-0}" "${5:-0}" "${6:-na}" "${7:-na}")"
             printf '%s' "$body" | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file -
           }
 

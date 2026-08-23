@@ -5,6 +5,62 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.5.0 (pending)
+
+### Fixed
+- **npm's lockfile was being sent to the model in full, on every dependency PR.** The full-file
+  context skips lockfiles by extension — `*.lock` catches yarn, Cargo, poetry and composer — but
+  **`package-lock.json` ends in `.json`, so it never matched.** The estate is npm, so in practice the
+  most common lockfile of all was handed to every reviewer in its entirety. Two consequences, both
+  observed: it exhausted `CONTEXT_BUDGET`, so genuinely changed source files were dropped from the
+  context with only a footnote; and the resulting prompt was large enough to push reviewers into
+  timeouts (`SimplerHR-Stour#44`, GLM at 600s) and output-limit failures (`finish_reason=length`,
+  where the whole budget goes on reasoning and you are billed for an empty review). Now also skips
+  `*-lock.json`, `*-lock.yaml`, `npm-shrinkwrap.json` and `bun.lockb`. **This affects every repo on
+  upgrade and needs no configuration.**
+
+### Added
+- **`DIFF_EXCLUDE`** — comma-separated globs of paths to keep out of the review, e.g.
+  `"package-lock.json,*.lock,benchmark/results/*"`. **Empty by default**, so nothing changes until a
+  repo opts in. Also applies to the full-file context. The excluded paths are named in the prompt,
+  so the model is told those files changed and were withheld rather than inferring from silence, and
+  the posted review reports how many were held back — a reviewer misled by absence is the same class
+  of failure this fixes, so neither the model nor the reader is left to guess.
+
+  **Why it exists.** The diff is capped at 200,000 characters and truncated in GitHub's
+  *alphabetical* file order, so one large generated file pushes real code past the end. The reviewer
+  notes the truncation in a single line of small print and then reviews confidently on a partial
+  payload, while you pay for every token it did read. Measured on this repo's own PR #24: a 353,605
+  character diff against the cap, with 111 committed benchmark artifacts sitting alphabetically
+  between `manifest.json` and `run.sh` — so `run.sh`, both test suites and `scorecard.json` were
+  never in the payload, across a round costing ~$0.36. Lockfiles are the common case: `package-lock`
+  sorts before `src` and `tests`.
+
+  Raising the cap would only move the problem and cost more. `setup.ps1 -DiffExclude` sets it across
+  repos.
+
+### Fixed
+- **Failure messages named the wrong remedy when a review was cut off.** `finish_reason=length`
+  always said *"raise `OPENROUTER_MAXTOKENS`"*. That advice is actively harmful when the **call
+  timeout**, not the cap, is what stopped the model: at the ~49 tok/s these hosts publish, the 600s
+  ceiling only buys ~29,000 tokens, which is *below* the 32,000 default. Raising the cap there does
+  not buy a longer review — it buys a **timeout, which posts nothing**, replacing a partial review
+  that at least arrived with a banner. Both ceilings are now compared against the throughput the
+  host just demonstrated, and the message names whichever one actually bound.
+
+  Measured on `ba-verify-line#320`: minimax hit the cap while ox-alpha timed out on the *same*
+  commit and the same 205k-token payload. The two failures differ only by host speed, and no static
+  string can tell them apart.
+
+- **No failure message stated the payload size**, which is the one number that decides what to do
+  about it. Output-limit failures now report prompt tokens; timeouts report the prompt in characters
+  (a timed-out call returns no usage block, so token counts are unavailable). Timeout messages also
+  say plainly that they are a **speed** limit that `OPENROUTER_MAXTOKENS` cannot fix.
+
+- **Gemini's timeout message blamed the diff**, naming neither `CONTEXT_BUDGET` nor `DIFF_EXCLUDE` —
+  yet full-file context is the larger term (600,000 chars against the diff's 200,000 cap). It now
+  points at the bigger half first.
+
 ## v1.4.8 (pending)
 
 ### Added
