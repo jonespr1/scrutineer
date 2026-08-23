@@ -39,6 +39,28 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   Raising the cap would only move the problem and cost more. `setup.ps1 -DiffExclude` sets it across
   repos.
 
+### Fixed
+- **Failure messages named the wrong remedy when a review was cut off.** `finish_reason=length`
+  always said *"raise `OPENROUTER_MAXTOKENS`"*. That advice is actively harmful when the **call
+  timeout**, not the cap, is what stopped the model: at the ~49 tok/s these hosts publish, the 600s
+  ceiling only buys ~29,000 tokens, which is *below* the 32,000 default. Raising the cap there does
+  not buy a longer review — it buys a **timeout, which posts nothing**, replacing a partial review
+  that at least arrived with a banner. Both ceilings are now compared against the throughput the
+  host just demonstrated, and the message names whichever one actually bound.
+
+  Measured on `ba-verify-line#320`: minimax hit the cap while ox-alpha timed out on the *same*
+  commit and the same 205k-token payload. The two failures differ only by host speed, and no static
+  string can tell them apart.
+
+- **No failure message stated the payload size**, which is the one number that decides what to do
+  about it. Output-limit failures now report prompt tokens; timeouts report the prompt in characters
+  (a timed-out call returns no usage block, so token counts are unavailable). Timeout messages also
+  say plainly that they are a **speed** limit that `OPENROUTER_MAXTOKENS` cannot fix.
+
+- **Gemini's timeout message blamed the diff**, naming neither `CONTEXT_BUDGET` nor `DIFF_EXCLUDE` —
+  yet full-file context is the larger term (600,000 chars against the diff's 200,000 cap). It now
+  points at the bigger half first.
+
 ## v1.4.8 (pending)
 
 ### Added

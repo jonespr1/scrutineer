@@ -141,5 +141,55 @@ has    'truncated review is flagged'               "$CUT" 'cut off before it fin
 WHOLE='{"choices":[{"finish_reason":"stop","message":{"content":"## Findings\nall good"}}]}'
 hasnot 'complete review gets no cut-off banner'    "$WHOLE" 'cut off before it finished'
 
+# --- cap_advice: does the remedy match the ceiling that actually bound? ------------------------
+# OPENROUTER_MAXTOKENS and the curl -m timeout are both output ceilings; only one binds per call.
+# The old message always said "raise OPENROUTER_MAXTOKENS", which is actively harmful when the
+# timeout is the real limit - a bigger cap converts a partial review (posted, with a banner) into
+# a timeout (nothing posted). Observed on ba-verify-line#320, where minimax hit the cap and
+# ox-alpha timed out on the SAME commit; only host throughput differed.
+ASRC="$(awk '/^          cap_advice\(\) \{$/,/^          \}$/' "$WF" | sed 's/^          //')"
+[ -n "$ASRC" ]                                   || bad "no cap_advice function"
+printf '%s\n' "$ASRC" | bash -n 2>/dev/null      || bad "cap_advice is not valid bash"
+
+advise() { # el  timeout  MT  prompt_tokens -> the advice string
+  el="$1" timeout="$2" MT="$3" PT="$4" bash -c '
+    resp="{\"usage\":{\"prompt_tokens\":'"$4"'}}"
+    '"$ASRC"'
+    cap_advice' 2>/dev/null
+}
+a_has() { # description  el timeout MT pt  substring
+  local got; got="$(advise "$2" "$3" "$4" "$5")"
+  case "$got" in *"$6"*) printf 'ok    %s\n' "$1" ;;
+    *) printf 'FAIL  %s\n        want substring=%s\n        got=%s\n' "$1" "$6" "$got"; fails=1 ;;
+  esac
+}
+a_hasnot() { # description  el timeout MT pt  substring
+  local got; got="$(advise "$2" "$3" "$4" "$5")"
+  case "$got" in *"$6"*) printf 'FAIL  %s\n        unwanted=%s\n        got=%s\n' "$1" "$6" "$got"; fails=1 ;;
+    *) printf 'ok    %s\n' "$1" ;;
+  esac
+}
+
+# Timeout binds: 32000 tokens took 550 of the 600s window, so ~58 tok/s buys ~34,900 in the whole
+# window - barely above the cap already in force. Raising it spends the difference on a timeout.
+a_has    'timeout-bound: says raising MAXTOKENS will not help' 550 600 32000 205131 'will NOT help'
+a_has    'timeout-bound: warns it makes things worse'          550 600 32000 205131 'ends in a timeout'
+a_has    'timeout-bound: points at the payload'                550 600 32000 205131 'Reduce the payload'
+a_hasnot 'timeout-bound: does NOT recommend a higher cap'      550 600 32000 205131 'should help here'
+
+# Headroom: the same 32000 tokens in 120s is ~266 tok/s, so ~160,000 fits in the window. Here the
+# cap really is the limit and raising it is the right advice.
+a_has    'cap-bound: recommends raising MAXTOKENS'             120 600 32000 40000  'should help here'
+a_hasnot 'cap-bound: does not warn against it'                 120 600 32000 40000  'will NOT help'
+
+# No cap configured - the model stopped on its own limit, so only the payload is ours to change.
+a_has    'no cap set: names the payload as the only lever'     550 600 ''    205131 'reduce the payload'
+a_hasnot 'no cap set: does not discuss a cap we did not set'   550 600 ''    205131 'OPENROUTER_MAXTOKENS will'
+
+# The input size is the single most actionable number on an oversized payload, and it was missing
+# from every message before this - the reader had to dig it out of the HTML telemetry marker.
+a_has    'reports the prompt size'                             550 600 32000 205131 '205131 tokens'
+a_has    'names both halves of the payload ceiling'            550 600 32000 205131 'CONTEXT_BUDGET'
+
 [ "$fails" -eq 0 ] && echo "All routing tests passed." || echo "Some routing tests FAILED." >&2
 exit "$fails"
