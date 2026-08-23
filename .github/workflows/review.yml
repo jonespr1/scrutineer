@@ -506,12 +506,16 @@ jobs:
             [ "$pt_in" -gt 0 ] && sz=" This prompt was ${pt_in} tokens (the payload ceiling is the 200,000-char diff cap plus CONTEXT_BUDGET)."
             # No cap set, so the model stopped on its own limit; only the payload is ours to change.
             if [ -z "${MT:-}" ]; then
-              printf 'No OPENROUTER_MAXTOKENS is set, so this is the model own output limit - reduce the payload (DIFF_EXCLUDE, a lower CONTEXT_BUDGET, or a smaller PR).%s' "$sz"
+              printf 'No OPENROUTER_MAXTOKENS is set, so the model stopped on its own output limit - reduce the payload (DIFF_EXCLUDE, a lower CONTEXT_BUDGET, or a smaller PR).%s' "$sz"
               return
             fi
             tps=$(( MT / el ))
             win=$(( tps * timeout ))
-            # Under 20%% headroom means the window, not the cap, is what stopped it.
+            # Under 20%% headroom means the window, not the cap, is what stopped it. The margin is a
+            # judgement call, not a derived constant: at MT=32000 and a 600s timeout it flips at
+            # ~500s elapsed, which is late enough that a bigger cap would almost certainly land in
+            # the timeout. It errs toward "do not raise", because that failure is asymmetric - a cap
+            # left too low costs a longer review, a cap raised into the timeout costs the whole one.
             if [ "$win" -lt $(( MT * 12 / 10 )) ]; then
               printf 'Raising OPENROUTER_MAXTOKENS will NOT help and will likely make this worse: at the observed ~%s tok/s this host can only emit ~%s tokens inside the %ss call timeout, so a higher cap ends in a timeout - which posts no review at all - rather than a longer review. Reduce the payload instead (DIFF_EXCLUDE, a lower CONTEXT_BUDGET, or a smaller PR), or allow a faster host with a higher OPENROUTER_MAXPRICE.%s' "$tps" "$win" "$timeout" "$sz"
             else
