@@ -79,5 +79,70 @@ else
   ok "review.yml: declares no job permissions (inherits the caller's)"
 fi
 
+# --- Third-party actions must be SHA-pinned ------------------------------------------------------
+# ci.yml's header states "Third-party actions are SHA-pinned", but that was only true of ci.yml:
+# review.yml and benchmark.yml sat on bare @v4 tags for months without anything noticing. A tag is
+# repointable by its owner, so a moving tag on review.yml means a third party can change what all
+# 14 consumer repos execute, with no PR and no diff. This asserts the stated policy rather than
+# trusting it.
+#
+# EVERY `uses:` line is matched, then the non-pinnable forms are exempted by name. An earlier
+# version matched only `uses: owner/...`, which silently skipped `uses: docker://image:tag` - a
+# reference with no SHA to check would have sailed through unexamined rather than failing. Matching
+# everything and subtracting is the safer direction: a form nobody anticipated fails loudly.
+#
+# Exemptions, each deliberate:
+#   jonespr1/scrutineer/...@v1  the moving major alias IS the distribution mechanism here; pinning
+#                               it to a SHA is the exact failure the estate's Dependabot ignore
+#                               rules exist to prevent.
+#   ./path                      local references have no version to pin.
+#   docker://image:tag          not a git ref - pinned by image digest, a separate concern.
+#   {{REF}}                     setup.ps1's template placeholder, substituted at write time with
+#                               the alias above.
+#   commented-out lines         never executed, so never a supply-chain risk. Detected by a `#`
+#                               BEFORE the `uses:`, so trailing `# v7.0.1` version comments (which
+#                               are the whole point of a readable SHA pin) still scan normally.
+#
+# Scope is every caller surface this repo ships - .github/workflows/, examples/, and setup.ps1 -
+# so the pass message below can be read literally.
+unpinned=0 scanned=0 saw_review=0
+while IFS= read -r line; do
+  file="${line%%:*}"; rest="${line#*:}"; lineno="${rest%%:*}"; ref="${rest#*:}"
+
+  # A `#` anywhere ahead of the `uses:` keyword means the line is commented out.
+  case "${ref%%uses:*}" in *"#"*) continue ;; esac
+
+  # Isolate the ref itself: strip through `uses:`, trim, drop surrounding quotes, and stop at the
+  # first quote/space so a trailing version comment is not mistaken for part of the SHA.
+  target="${ref#*uses:}"
+  target="${target#"${target%%[![:space:]]*}"}"
+  target="${target#[\'\"]}"
+  target="${target%%[\'\" ]*}"
+  [ -n "$target" ] || continue
+
+  case "$target" in
+    "jonespr1/scrutineer/.github/workflows/"*) continue ;;
+    ./*|docker://*|*"{{REF}}"*)                continue ;;
+  esac
+
+  scanned=$((scanned + 1))
+  case "$file" in *review.yml) saw_review=1 ;; esac
+
+  sha="${target##*@}"
+  if ! printf '%s' "$sha" | grep -qE '^[0-9a-f]{40}$'; then
+    printf 'FAIL  %s:%s is not SHA-pinned (@%s)\n' "$file" "$lineno" "$sha"; unpinned=1; fails=1
+  fi
+done < <(grep -rn "uses:" "$ROOT/.github/workflows/" "$ROOT/examples/" "$ROOT/setup.ps1" 2>/dev/null \
+         | sed "s|^$ROOT/||")
+
+# Without this, a scan that matched nothing - renamed directory, moved workflows, a broken grep -
+# would report a clean pass. review.yml is named specifically because it is the file the whole
+# estate executes: if the check ever stops covering it, that must be a failure, not a silent green.
+if [ "$scanned" -eq 0 ] || [ "$saw_review" -eq 0 ]; then
+  bad "SHA-pin scan covered no review.yml refs (scanned=$scanned) - the check is not running"
+elif [ "$unpinned" -eq 0 ]; then
+  ok "every action ref in .github/workflows/, examples/ and setup.ps1 is SHA-pinned ($scanned checked)"
+fi
+
 [ "$fails" -eq 0 ] && echo "All caller tests passed." || echo "Some caller tests FAILED." >&2
 exit "$fails"

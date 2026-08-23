@@ -61,6 +61,29 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   yet full-file context is the larger term (600,000 chars against the diff's 200,000 cap). It now
   points at the bigger half first.
 
+### Changed
+- **Every third-party action is now SHA-pinned, and a test enforces it.** `ci.yml`'s header has
+  claimed *"Third-party actions are SHA-pinned"* for months, but only `ci.yml` actually was —
+  `review.yml` and `benchmark.yml` sat on bare `@v4` tags. That gap matters most in `review.yml`,
+  which all 14 consumer repos execute: a moving tag means its owner can change what the whole estate
+  runs, with no PR and no diff. `actions/checkout` and `actions/upload-artifact` are pinned at
+  v7.0.1, with the SHAs resolved from upstream rather than taken from the bump PRs. `tests/caller_test.sh`
+  now fails the build on any un-pinned reference, so the policy is asserted rather than assumed.
+
+  Supersedes Dependabot #21 and #22, which bumped the versions but left the two tag pins as tags.
+
+  The guard matches *every* `uses:` line and then subtracts the forms that cannot carry a SHA
+  (`./local` paths, `docker://` images, setup.ps1's `{{REF}}` placeholder, commented-out lines), so
+  a reference in a shape nobody anticipated fails loudly instead of going unexamined. It covers
+  `.github/workflows/`, `examples/` and `setup.ps1`, and fails if it ever stops seeing `review.yml`
+  — a scan that silently matches nothing is worse than no scan. `release.yml` uses no third-party
+  actions at all, so the estate's entire action surface is now pinned.
+
+  The one deliberate exception is scrutineer's own dogfood caller, which stays on
+  `jonespr1/scrutineer/...@v1` — the moving major alias *is* the distribution mechanism, and pinning
+  it to a SHA is precisely the failure the estate's Dependabot ignore rules exist to prevent.
+
+
 ## v1.4.8 (pending)
 
 ### Added
