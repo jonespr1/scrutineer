@@ -132,6 +132,13 @@ OPENROUTER_HOSTS = novita,fireworks,together,gmicloud
 OPENROUTER_SORT  = price
 ```
 
+Note that **Fireworks does not currently serve `glm-5.3-flash`** (it serves 5.2). The list is
+still correct for both — an allow-list entry that cannot serve the model is inert, and the other
+three leave enough redundancy — but on 5.3-flash you are choosing between three hosts, not four.
+Verify with `https://openrouter.ai/api/v1/models/<model>/endpoints` before narrowing it further:
+an allow-list naming only hosts that do not serve your model produces "no host matched the current
+routing constraints" rather than a review.
+
 > **Data residency note.** For strict compliance (for example EU data residency), prefer the
 > direct Gemini slot (Google offers residency controls) over routing via OpenRouter, which adds
 > an intermediary.
