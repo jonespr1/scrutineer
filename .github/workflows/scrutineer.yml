@@ -39,6 +39,9 @@ jobs:
     # KNOWN LIMITATIONS, all consequences of there being no regex here:
     #   - @review flush-left inside a fenced code block DOES fire. A comment demonstrating the
     #     command to someone spends a round. There is no way to strip fences in an expression.
+    #   - A line STARTING with "@review " fires even when it is prose about the command
+    #     ("@review is the only command we support"). Only a mention later in a line is inert.
+    #     Distinguishing prose from an invocation needs meaning, not matching.
     #   - Indented @review does NOT fire - inside a list item, a blockquote, or any leading
     #     whitespace. It must be flush left.
     #   - Opening a DRAFT pull request fires a review, because the trigger is on 'opened'.

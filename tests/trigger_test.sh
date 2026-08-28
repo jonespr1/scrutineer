@@ -77,6 +77,7 @@ CASES=(
   "@review2|no|digit continuation"
   "@review-bot|no|hyphen continuation"
   "I am not asking for @review|no|inline prose mention"
+  "@review is the only command|yes|KNOWN - prose starting a line still fires"
   " @review|no|leading space is documented as inert"
 )
 

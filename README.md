@@ -202,6 +202,9 @@ Three limitations follow from GitHub expressions having no regex, and are worth 
 
 - **A fenced code block still fires.** Showing someone the command, flush left inside ```` ``` ````,
   spends a round — the fence lines are just newlines as far as the match is concerned.
+- **Prose that *starts* a line still fires.** `@review is the only command we support` spends a
+  round. Only a mention later in a line (`the command is @review`) is inert — telling prose from an
+  invocation needs meaning, not matching.
 - **Indented `@review` does not fire.** Inside a list item, a blockquote, or behind any leading
   whitespace, it is inert. Put it flush left.
 - **Opening a draft PR fires a review**, because the trigger is on `opened`. Swap `opened` for
