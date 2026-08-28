@@ -22,6 +22,16 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   as developer activity, so `@reviewer` on an already-reviewed commit exited 0 for free — but on a
   commit not yet reviewed it spent a real round.
 
+  Accepted delimiters after the command are a space, LF, CR and `,` `:` `.` — the punctuation
+  forms are deliberate: anchoring the end without them regressed `@review, please look` from
+  working to a **silent no-op**, which is the worst failure mode this trigger has (the commenter
+  gets no feedback at all). Raised by `minimax/minimax-m3` on the PR.
+
+- **README now states the latency trade-off of the default GLM slot.** The cost table advertised
+  GLM 5.3 Flash at ~2 cents with no mention that it is ~6x slower than 5.2 (298s vs 48s measured),
+  making it the default slot most likely to hit the 600s call ceiling on a large diff. That was
+  documented in the v1.6.0 changelog entry but not where someone choosing a panel would see it.
+
   **This lives in the caller, so it does not ship via `@v1`.** Onboarded repos keep the old trigger
   until their `.github/workflows/scrutineer.yml` is updated from `examples/scrutineer.yml`.
 

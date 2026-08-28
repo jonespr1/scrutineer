@@ -40,17 +40,22 @@ for f in "${FILES[@]}"; do
     bad "$n: body is not newline-padded - line-start/line-end anchoring is not in force"
   fi
 
-  # 2. ...and all three trailing delimiters must be present. Dropping any one silently breaks a
-  #    real invocation: LF and CR for "@review" followed by more text (the web UI submits CRLF),
-  #    and the space form for an argument ("@review glm"). Pinned to the shipped implementation
+  # 2. ...and all six trailing delimiters must be present. Dropping any one silently breaks a
+  #    real invocation with NO feedback to the commenter: LF and CR for "@review" followed by more
+  #    text (the web UI submits CRLF), the space form for an argument ("@review glm"), and , : .
+  #    for natural phrasing ("@review, please look"). Anchoring the end without these regressed
+  #    "@review," from working to a silent no-op, which is the worst failure mode this has. Pinned to the shipped implementation
   #    deliberately: if this is ever rewritten, update these patterns in the same commit so the
   #    test keeps testing what actually ships, not a stale implementation detail.
   miss=""
   grep -qF "format('{0}@review{0}', fromJson('\"\n\"'))" "$f" || miss="$miss LF"
   grep -qF "format('{0}@review{1}', fromJson('\"\n\"'), fromJson('\"\r\"'))" "$f" || miss="$miss CR"
   grep -qF "format('{0}@review ', fromJson('\"\n\"'))" "$f" || miss="$miss space"
+  grep -qF "format('{0}@review,', fromJson('\"\n\"'))" "$f" || miss="$miss comma"
+  grep -qF "format('{0}@review:', fromJson('\"\n\"'))" "$f" || miss="$miss colon"
+  grep -qF "format('{0}@review.', fromJson('\"\n\"'))" "$f" || miss="$miss period"
   if [ -z "$miss" ]; then
-    ok "$n: all three @review delimiters present (LF, CR, space)"
+    ok "$n: all six @review delimiters present (LF, CR, space, comma, colon, period)"
   else
     bad "$n: missing @review delimiter(s):$miss - those invocations would not trigger"
   fi

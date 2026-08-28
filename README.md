@@ -151,10 +151,15 @@ Reviews are a single API call each. Rough per-review cost (a medium PR):
 
 | Model | approx per review |
 |---|---|
-| GLM 5.3 Flash (OpenRouter, default GLM slot) | ~2 cents |
+| GLM 5.3 Flash (OpenRouter, default GLM slot) | ~2 cents (but slow - see below) |
 | GLM 5.2 (OpenRouter) | ~9 cents |
 | Gemini Pro (`gemini-pro-latest`, default) | ~5 to 8 cents |
 | Gemini Flash (`gemini-flash-latest`) | ~2 to 5 cents |
+
+**The cheapest slot is the slowest.** GLM 5.3 Flash is roughly 5x cheaper than 5.2 in practice
+but writes far more to get there: measured on one PR, **298s against 5.2's 48s**. That eats half
+the 600s per-call window, so on a large diff it is the default slot most likely to time out. Repos
+with consistently big PRs may prefer to pin `REVIEWERS` to `z-ai/glm-5.2`, which stays available.
 
 Sending each changed file's full content adds input tokens, which the figures above already
 reflect; input tokens are cheap and the quality gain is large. At typical volume this is still a
@@ -180,6 +185,11 @@ By default (see the caller workflow):
 
 Matching is a case-insensitive substring of the model id; an unrecognised keyword safely falls
 back to running all reviewers.
+
+`@review` must be a **whole word at the start of a line** — flush left, with nothing but a space,
+a line end, or `,` `:` `.` after it. That is what keeps a comment merely *discussing* `@review`
+from spending a paid round, and stops `@reviewer` or `@reviews` firing one. A leading space, or
+any other character straight after the command (`@review!`, `@review-now`), is inert.
 
 **Who can trigger it:** for security, `@review` comment triggers only run for **repo owners,
 members, and collaborators** (the caller checks `author_association`). This stops strangers from
