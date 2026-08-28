@@ -32,6 +32,27 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   making it the default slot most likely to hit the 600s call ceiling on a large diff. That was
   documented in the v1.6.0 changelog entry but not where someone choosing a panel would see it.
 
+  Accepted delimiters are a space, tab, LF, CR and `,` `:` `.`
+
+- **A reply beginning "@reviewer…" no longer silences the round the developer then asks for.**
+  `already_reviewed()` decided whether a comment counted as new developer activity with
+  `startswith("@review")`, which also swallowed `@reviewer` and `@reviews`. Concrete path: the bot
+  reviews commit A → a member replies *"@reviewer's timeout point is wrong, I fixed X"* → the member
+  comments `@review` → the trigger fires, but the de-dupe finds no qualifying activity since the
+  last review at A, skips every slot and exits green. **The requested re-review silently did not
+  happen and the counter-argument never reached the model.** The activity test now uses the same
+  whole-word rule as the trigger. Found by `z-ai/glm-5.3-flash`.
+
+  Note this hole was *masked* until now: before the trigger was anchored, such a reply
+  accidentally fired a round of its own.
+
+- **README no longer documents defaults the code abandoned.** The configuration table claimed
+  `REVIEWERS` defaults to `gemini` ("1 to 2 slots") and `GEMINI_MODEL` to `gemini-pro-latest`.
+  Both were true until `4c2e257` moved the central default to the three-slot panel and the bare
+  `gemini` slot back to Flash; the docs were never updated. Verified against the git history rather
+  than assumed — the code is right and the docs were stale, not the reverse. Also raised by
+  `z-ai/glm-5.3-flash`.
+
   **This lives in the caller, so it does not ship via `@v1`.** Onboarded repos keep the old trigger
   until their `.github/workflows/scrutineer.yml` is updated from `examples/scrutineer.yml`.
 

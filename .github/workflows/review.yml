@@ -675,6 +675,12 @@ jobs:
           # De-dupe: has this slot already posted a SUCCESSFUL review for the current commit, with no
           # new developer activity since? If so, skip it. A bare repeat "@review" on an unchanged commit
           # is a no-op; a new commit (SHA changes) or a substantive reply (not just "@review") re-triggers.
+          #
+          # The "is this just a trigger?" test matches @review as a WHOLE WORD, the same rule the
+          # caller's trigger uses. startswith("@review") also swallowed "@reviewer..." - so a
+          # substantive reply opening with that word counted as no activity, and the @review that
+          # followed it was skipped as "already reviewed". The reviewer never saw the reply and the
+          # requested round silently did not happen.
           already_reviewed() {
             local label="$1"
             [ -z "${HEAD_SHA:-}" ] && return 1
@@ -704,7 +710,7 @@ jobs:
               | if $a==null then false
                 else ([ .[] | select(.user.type=="User"
                           and (.created_at > $a.created_at)
-                          and ((body|ascii_downcase|gsub("^\\s+";"")|startswith("@review"))|not)) ] | length) == 0
+                          and ((body|ascii_downcase|gsub("^\\s+";"")|test("^@review([[:space:],:.]|$)"))|not)) ] | length) == 0
                 end' >/dev/null 2>&1
           }
 

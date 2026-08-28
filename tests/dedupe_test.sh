@@ -98,6 +98,15 @@ check 'substantive developer reply re-opens the review' no 'gemini-flash-latest'
       "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="please also check X"')"
 check 'a bare @review does not re-open it'              yes 'gemini-flash-latest' \
       "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review"')"
+check '@review with a slot filter does not re-open it'  yes 'gemini-flash-latest' \
+      "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review glm"')"
+# A reply that merely STARTS with the word "@reviewer" is substantive developer activity, not a
+# trigger. startswith("@review") swallowed it, so the round the developer then asked for was
+# skipped as "already reviewed" and their counter-argument never reached the model.
+check '@reviewer... reply re-opens the review'          no  'gemini-flash-latest' \
+      "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@reviewer'"'"'s timeout point is wrong, I fixed X"')"
+check '@reviews... reply re-opens the review'           no  'gemini-flash-latest' \
+      "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@reviews of this keep missing the point"')"
 
 [ "$fails" -eq 0 ] && echo "All de-dupe tests passed." || echo "Some de-dupe tests FAILED." >&2
 exit "$fails"

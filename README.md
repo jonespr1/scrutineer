@@ -65,7 +65,8 @@ Copy [`examples/scrutineer.yml`](examples/scrutineer.yml) into your repo at
 `.github/workflows/scrutineer.yml`. That is the only file you add.
 
 **4. (Optional) Choose your model(s)**
-Set the `REVIEWERS` repository Variable (defaults to `gemini`). See the next section.
+Leave `REVIEWERS` unset and you get the default three-slot panel:
+`gemini, z-ai/glm-5.3-flash, minimax/minimax-m3`. See the next section to change it.
 
 Open a pull request and you get a review. Comment `@review` any time for a fresh pass.
 
@@ -73,8 +74,13 @@ Open a pull request and you get a review. Comment `@review` any time for a fresh
 
 ## Choosing your model(s)
 
-Set the `REVIEWERS` repository Variable to a comma-separated list of 1 to 2 slots. Each slot is
+Set the `REVIEWERS` repository Variable to a comma-separated list of slots. Each slot is
 either `gemini` (direct Google), `gemini:<model>`, or an **OpenRouter model id**.
+
+Unset, it defaults to the three-slot panel `gemini, z-ai/glm-5.3-flash, minimax/minimax-m3` —
+three independent readings of the same diff, which is what catches findings a single model misses.
+`setup.ps1 -Reviewers default` deliberately *deletes* the variable so an onboarded repo inherits
+that panel and follows it as the default moves.
 
 | Mode | `REVIEWERS` | Keys needed |
 |---|---|---|
@@ -95,8 +101,8 @@ unless noted.
 
 | Name | Default | Purpose |
 |---|---|---|
-| `REVIEWERS` | `gemini` | 1 to 2 reviewer slots (see above) |
-| `GEMINI_MODEL` | `gemini-pro-latest` | Model for a bare `gemini` slot. Pro is the default (materially fewer false positives); set `gemini-flash-latest` for lower cost. Use a `*-latest` alias to avoid retired-model errors |
+| `REVIEWERS` | *(unset — the three-slot panel)* | Reviewer slots (see above). Unset inherits `gemini, z-ai/glm-5.3-flash, minimax/minimax-m3` |
+| `GEMINI_MODEL` | `gemini-flash-latest` | Model for a bare `gemini` slot. Flash is the default: it partners the GLM and MiniMax slots in the default panel, where breadth comes from having three readings rather than one expensive one. Set `gemini-pro-latest` for materially fewer false positives at ~2-3x the cost. Use a `*-latest` alias to avoid retired-model errors |
 | `OPENROUTER_HOSTS` | *(none)* | Allow-list of host slugs for OpenRouter slots, e.g. `novita,fireworks,together,gmicloud` |
 | `OPENROUTER_SORT` | `price` | `price` \| `throughput` \| `latency` - how to pick among eligible hosts. `throughput` is a good choice for slower reasoning models |
 | `OPENROUTER_MAXPRICE` | *(none)* | Hard ceiling `"$in,$out"` per 1M tokens, e.g. `"2,6"` |
@@ -153,8 +159,8 @@ Reviews are a single API call each. Rough per-review cost (a medium PR):
 |---|---|
 | GLM 5.3 Flash (OpenRouter, default GLM slot) | ~2 cents (but slow - see below) |
 | GLM 5.2 (OpenRouter) | ~9 cents |
-| Gemini Pro (`gemini-pro-latest`, default) | ~5 to 8 cents |
-| Gemini Flash (`gemini-flash-latest`) | ~2 to 5 cents |
+| Gemini Pro (`gemini-pro-latest`) | ~5 to 8 cents |
+| Gemini Flash (`gemini-flash-latest`, default gemini slot) | ~2 to 5 cents |
 
 **The cheapest slot is the slowest.** GLM 5.3 Flash is roughly 5x cheaper than 5.2 in practice
 but writes far more to get there: measured on one PR, **298s against 5.2's 48s**. That eats half

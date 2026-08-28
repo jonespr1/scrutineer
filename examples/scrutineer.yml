@@ -31,8 +31,9 @@ jobs:
     # so rather than test the character after the command directly, wrap the body in newlines --
     # format('{0}{1}{0}', "\n", body) -- which turns "starts a line" into a plain contains() and
     # makes the LAST line testable too (it has no trailing newline of its own), then require what
-    # follows to be a space, CR (the web UI submits CRLF), LF, or one of , : . so that natural
-    # phrasing ("@review, please look") still fires. "@reviewer" matches none of them.
+    # follows to be a space, tab, CR (the web UI submits CRLF), LF, or one of , : . so that
+    # natural phrasing ("@review, please look") and a tab-separated argument both still fire.
+    # "@reviewer" matches none of them - an @-handle continues with a letter, digit or hyphen.
     # three. (GitHub's contains/format are case-insensitive, so "@Review" is accepted; a LEADING
     # SPACE before @review is not - put it flush left.)
     #
@@ -48,7 +49,8 @@ jobs:
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review ', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review,', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review:', fromJson('"\n"'))) ||
-        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review.', fromJson('"\n"')))) &&
+        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review.', fromJson('"\n"'))) ||
+        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{1}', fromJson('"\n"'), fromJson('"\t"')))) &&
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     # These grants are the single control point: the reusable workflow inherits exactly this set.
     # 'checks: read' is optional -- it lets the reviewer read the head commit's CI result and
