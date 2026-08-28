@@ -34,8 +34,8 @@ jobs:
     # follows to be a space, tab, CR (the web UI submits CRLF), LF, or one of , : . so that
     # natural phrasing ("@review, please look") and a tab-separated argument both still fire.
     # "@reviewer" matches none of them - an @-handle continues with a letter, digit or hyphen.
-    # three. (GitHub's contains/format are case-insensitive, so "@Review" is accepted; a LEADING
-    # SPACE before @review is not - put it flush left.)
+    # (GitHub's contains/format are case-insensitive, so "@Review" is accepted; a LEADING SPACE
+    # before @review is not - put it flush left.)
     #
     # The author_association check
     # stops strangers from triggering reviews (and spending your API credits / runner minutes) on
