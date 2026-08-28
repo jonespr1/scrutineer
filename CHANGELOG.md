@@ -13,6 +13,18 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   **silent no-op** — no run, no feedback. Raised independently on seven of the fifteen rollout PRs
   by `minimax/minimax-m3` and `z-ai/glm-5.3-flash`; the asymmetry was theirs to spot and it was real.
 
+- **Truncation advice no longer tells you to trim a payload that is already tiny.** `cap_advice()`
+  chose between "raise the cap" and "reduce the payload" purely from throughput against the
+  timeout, never asking whether the payload was actually large. On `brand-assure-screen-api#108` it
+  advised trimming a **7,698-token** prompt — against a ceiling of roughly 200,000 — because the
+  model had emitted 32,000 tokens reviewing a single workflow file. There was nothing to trim; the
+  model over-generated. Below 20,000 input tokens the advice now says so and recommends a re-run or
+  a different slot, since output length varies widely between hosts and between runs on one host.
+
+  This is the same wrong-remedy failure `cap_advice()` was written to prevent, arriving from the
+  input side rather than the output side. Scrutineer found it in its own error message while
+  reviewing its own rollout.
+
 - **Bot-authored comments can no longer trigger a paid round.** The `pull_request` path already
   skipped bot authors; the `issue_comment` path did not, so a bot holding COLLABORATOR could spend
   credits — including by quoting a previous review that contained the command, which the anchoring
