@@ -198,7 +198,7 @@ a tab, a line end, or `,` `:` `.` `!` `?` `;` after it. That is what keeps a com
 *discussing* `@review` from spending a paid round, and stops `@reviewer`, `@reviews` or
 `@review-bot` firing one.
 
-Three limitations follow from GitHub expressions having no regex, and are worth knowing:
+Four limitations follow from GitHub expressions having no regex, and are worth knowing:
 
 - **A fenced code block still fires.** Showing someone the command, flush left inside ```` ``` ````,
   spends a round — the fence lines are just newlines as far as the match is concerned.
