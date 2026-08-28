@@ -40,7 +40,7 @@ for f in "${FILES[@]}"; do
     bad "$n: body is not newline-padded - line-start/line-end anchoring is not in force"
   fi
 
-  # 2. ...and all seven trailing delimiters must be present. Dropping any one silently breaks a
+  # 2. ...and all ten trailing delimiters must be present. Dropping any one silently breaks a
   #    real invocation with NO feedback to the commenter: LF and CR for "@review" followed by more
   #    text (the web UI submits CRLF), the space form for an argument ("@review glm"), and , : .
   #    for natural phrasing ("@review, please look"). Anchoring the end without these regressed
@@ -54,9 +54,12 @@ for f in "${FILES[@]}"; do
   grep -qF "format('{0}@review,', fromJson('\"\n\"'))" "$f" || miss="$miss comma"
   grep -qF "format('{0}@review:', fromJson('\"\n\"'))" "$f" || miss="$miss colon"
   grep -qF "format('{0}@review.', fromJson('\"\n\"'))" "$f" || miss="$miss period"
+  grep -qF "format('{0}@review!', fromJson('\"\n\"'))" "$f" || miss="$miss bang"
+  grep -qF "format('{0}@review?', fromJson('\"\n\"'))" "$f" || miss="$miss question"
+  grep -qF "format('{0}@review;', fromJson('\"\n\"'))" "$f" || miss="$miss semicolon"
   grep -qF "format('{0}@review{1}', fromJson('\"\n\"'), fromJson('\"\t\"'))" "$f" || miss="$miss tab"
   if [ -z "$miss" ]; then
-    ok "$n: all seven @review delimiters present (LF, CR, space, tab, comma, colon, period)"
+    ok "$n: all ten @review delimiters present (LF, CR, space, tab, comma, colon, period, bang, question, semicolon)"
   else
     bad "$n: missing @review delimiter(s):$miss - those invocations would not trigger"
   fi

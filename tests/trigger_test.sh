@@ -67,6 +67,9 @@ CASES=(
   "@review, please look|yes|comma - regressed to a silent no-op once"
   "@review: please look|yes|colon"
   "@review.|yes|sentence-ending period"
+  "@review!|yes|exclamation - added after seven reviewers flagged the omission"
+  "@review?|yes|question mark"
+  "@review; ping me|yes|semicolon"
   "@reviewer please look|no|handle collision - the original bug"
   "@reviews are broken|no|handle collision"
   "@reviewership|no|handle collision"
@@ -81,10 +84,10 @@ for f in "${FILES[@]}"; do
   [ -f "$f" ] || { bad "$n: missing"; continue; }
 
   recover_delims "$f"
-  if [ "${#DELIMS[@]}" -eq 7 ]; then
-    ok "$n: recovered 7 delimiters from the shipped expression"
+  if [ "${#DELIMS[@]}" -eq 10 ]; then
+    ok "$n: recovered 10 delimiters from the shipped expression"
   else
-    bad "$n: recovered ${#DELIMS[@]} delimiters, expected 7 - the trigger changed shape"
+    bad "$n: recovered ${#DELIMS[@]} delimiters, expected 10 - the trigger changed shape"
     continue
   fi
 
@@ -107,6 +110,15 @@ for f in "${FILES[@]}"; do
                                               || bad "$n: command on a middle line does not fire"
   fires "$(printf 'see @review here\nok')"    && bad "$n: inline mention on a wrapped line fires" \
                                               || ok "$n: inline mention on a wrapped line is inert"
+
+  # Documented limitations, pinned so they are deliberate rather than forgotten. A fenced code
+  # block DOES fire: the fence lines are just newlines, so a comment demonstrating the command
+  # spends a round. There is no way to strip fences in a GitHub expression. Indented @review
+  # does NOT fire - it must be flush left.
+  fires "$(printf 'like this:\n```\n@review\n```')" && ok "$n: KNOWN - @review in a code fence fires" \
+                                              || bad "$n: code-fence behaviour changed - update the docs"
+  fires "$(printf 'a\n  @review')"            && bad "$n: indented @review fires - it should not" \
+                                              || ok "$n: KNOWN - indented @review is inert"
 done
 
 [ "$fails" -eq 0 ] && echo "All trigger tests passed." || echo "Some trigger tests FAILED." >&2

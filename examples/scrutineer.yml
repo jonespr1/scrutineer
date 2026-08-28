@@ -31,11 +31,21 @@ jobs:
     # so rather than test the character after the command directly, wrap the body in newlines --
     # format('{0}{1}{0}', "\n", body) -- which turns "starts a line" into a plain contains() and
     # makes the LAST line testable too (it has no trailing newline of its own), then require what
-    # follows to be a space, tab, CR (the web UI submits CRLF), LF, or one of , : . so that
-    # natural phrasing ("@review, please look") and a tab-separated argument both still fire.
-    # "@reviewer" matches none of them - an @-handle continues with a letter, digit or hyphen.
-    # (GitHub's contains/format are case-insensitive, so "@Review" is accepted; a LEADING SPACE
-    # before @review is not - put it flush left.)
+    # follows to be a space, tab, CR (the web UI submits CRLF), LF, or one of , : . ! ? ; so
+    # that natural phrasing ("@review, please look", "@review!") and a tab-separated argument
+    # all still fire. "@reviewer" matches none of them - an @-handle continues with a letter,
+    # digit or hyphen, and none of those is a delimiter.
+    #
+    # KNOWN LIMITATIONS, all consequences of there being no regex here:
+    #   - @review flush-left inside a fenced code block DOES fire. A comment demonstrating the
+    #     command to someone spends a round. There is no way to strip fences in an expression.
+    #   - Indented @review does NOT fire - inside a list item, a blockquote, or any leading
+    #     whitespace. It must be flush left.
+    #   - Opening a DRAFT pull request fires a review, because the trigger is on 'opened'.
+    #     Swap 'opened' for 'ready_for_review' above if drafts should not be reviewed.
+    #
+    # Only contains() is case-insensitive (format() is a string builder, not a comparison), and
+    # that is what makes "@Review" work.
     #
     # The author_association check
     # stops strangers from triggering reviews (and spending your API credits / runner minutes) on
@@ -44,12 +54,16 @@ jobs:
       (github.event_name == 'pull_request' &&
        github.event.pull_request.user.type != 'Bot') ||
       (github.event.issue.pull_request != null &&
+       github.event.comment.user.type != 'Bot' &&
        (contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{0}', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{1}', fromJson('"\n"'), fromJson('"\r"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review ', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review,', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review:', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review.', fromJson('"\n"'))) ||
+        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review!', fromJson('"\n"'))) ||
+        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review?', fromJson('"\n"'))) ||
+        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review;', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{1}', fromJson('"\n"'), fromJson('"\t"')))) &&
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     # These grants are the single control point: the reusable workflow inherits exactly this set.

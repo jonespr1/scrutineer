@@ -194,9 +194,21 @@ Matching is a case-insensitive substring of the model id; an unrecognised keywor
 back to running all reviewers.
 
 `@review` must be a **whole word at the start of a line** — flush left, with nothing but a space,
-a tab, a line end, or `,` `:` `.` after it. That is what keeps a comment merely *discussing* `@review`
-from spending a paid round, and stops `@reviewer` or `@reviews` firing one. A leading space, or
-any other character straight after the command (`@review!`, `@review-now`), is inert.
+a tab, a line end, or `,` `:` `.` `!` `?` `;` after it. That is what keeps a comment merely
+*discussing* `@review` from spending a paid round, and stops `@reviewer`, `@reviews` or
+`@review-bot` firing one.
+
+Three limitations follow from GitHub expressions having no regex, and are worth knowing:
+
+- **A fenced code block still fires.** Showing someone the command, flush left inside ```` ``` ````,
+  spends a round — the fence lines are just newlines as far as the match is concerned.
+- **Indented `@review` does not fire.** Inside a list item, a blockquote, or behind any leading
+  whitespace, it is inert. Put it flush left.
+- **Opening a draft PR fires a review**, because the trigger is on `opened`. Swap `opened` for
+  `ready_for_review` in your caller if drafts should not be reviewed.
+
+Bot-authored comments never trigger a round, so a bot with collaborator access cannot spend your
+credits by quoting the command back at you.
 
 **Who can trigger it:** for security, `@review` comment triggers only run for **repo owners,
 members, and collaborators** (the caller checks `author_association`). This stops strangers from

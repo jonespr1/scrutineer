@@ -5,6 +5,31 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.6.2 (pending)
+
+### Fixed
+- **`@review!`, `@review?` and `@review;` now fire.** v1.6.1 justified the `,` `:` `.` delimiters by
+  "natural phrasing" and then omitted three of the most natural endings, so those comments were a
+  **silent no-op** — no run, no feedback. Raised independently on seven of the fifteen rollout PRs
+  by `minimax/minimax-m3` and `z-ai/glm-5.3-flash`; the asymmetry was theirs to spot and it was real.
+
+- **Bot-authored comments can no longer trigger a paid round.** The `pull_request` path already
+  skipped bot authors; the `issue_comment` path did not, so a bot holding COLLABORATOR could spend
+  credits — including by quoting a previous review that contained the command, which the anchoring
+  made *more* likely, not less. `github.event.comment.user.type != 'Bot'` now guards it. This was
+  already carried as a local customisation in `orange_france`; the template has adopted it.
+
+### Documented
+- **Three limitations of a regex-free matcher**, now stated in the README and the caller comment,
+  and pinned by `tests/trigger_test.sh` so they stay deliberate: `@review` flush-left inside a
+  fenced code block **does** fire (found by `z-ai/glm-5.3-flash`), indented `@review` does **not**,
+  and opening a draft PR fires a review.
+
+- **Corrected the case-insensitivity note.** It claimed "contains/format are case-insensitive".
+  Only `contains()` is a comparison; `format()` is a string builder. Two reviewers disagreed about
+  this — one asserting `contains()` is case-*sensitive*. It is not, per GitHub's documentation, so
+  the behaviour is unchanged and only the wording was wrong.
+
 ## v1.6.1 (pending)
 
 ### Fixed

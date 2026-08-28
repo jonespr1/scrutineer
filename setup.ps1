@@ -67,12 +67,16 @@ jobs:
       (github.event_name == 'pull_request' &&
        github.event.pull_request.user.type != 'Bot') ||
       (github.event.issue.pull_request != null &&
+       github.event.comment.user.type != 'Bot' &&
        (contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{0}', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{1}', fromJson('"\n"'), fromJson('"\r"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review ', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review,', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review:', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review.', fromJson('"\n"'))) ||
+        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review!', fromJson('"\n"'))) ||
+        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review?', fromJson('"\n"'))) ||
+        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review;', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{1}', fromJson('"\n"'), fromJson('"\t"')))) &&
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     # The reusable workflow inherits exactly these grants. 'checks: read' is optional and only
