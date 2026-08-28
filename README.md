@@ -151,7 +151,7 @@ Reviews are a single API call each. Rough per-review cost (a medium PR):
 
 | Model | approx per review |
 |---|---|
-| GLM 5.3 Flash (OpenRouter, default) | ~2 cents |
+| GLM 5.3 Flash (OpenRouter, default GLM slot) | ~2 cents |
 | GLM 5.2 (OpenRouter) | ~9 cents |
 | Gemini Pro (`gemini-pro-latest`, default) | ~5 to 8 cents |
 | Gemini Flash (`gemini-flash-latest`) | ~2 to 5 cents |
