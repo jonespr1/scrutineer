@@ -5,6 +5,26 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.6.1 (pending)
+
+### Fixed
+- **The `@review` command is now anchored at both ends, not just the start.** `startsWith(body,
+  '@review')` also matched `@reviewer`, `@reviews` and `@reviewership`, so a member mentioning any
+  such handle spent a full paid review round. Found by `z-ai/glm-5.3-flash` reviewing the caller on
+  `jonespr1/buildingsaas#1` — the only slot of three to catch it.
+
+  GitHub expressions have no regex, so rather than test the character following the command, the
+  body is wrapped in newlines — `format('{0}{1}{0}', "\n", body)`. That turns "starts a line" into a
+  plain `contains()` and, unlike `startsWith`, makes the *final* line testable too. What follows the
+  command must then be LF, CR (the web UI submits CRLF) or a space, so `@review glm` still works.
+
+  The de-dupe bounded the cost but did not remove it: it discounts comments starting with `@review`
+  as developer activity, so `@reviewer` on an already-reviewed commit exited 0 for free — but on a
+  commit not yet reviewed it spent a real round.
+
+  **This lives in the caller, so it does not ship via `@v1`.** Onboarded repos keep the old trigger
+  until their `.github/workflows/scrutineer.yml` is updated from `examples/scrutineer.yml`.
+
 ## v1.6.0 (pending)
 
 ### Changed
