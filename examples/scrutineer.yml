@@ -19,13 +19,21 @@ jobs:
     # routine dependency bump rarely earns its cost, and you can still review one on demand with
     # "@review".
     #
-    # Also runs when a trusted user comments "@review" -- but only where it STARTS A LINE, not
-    # merely appears somewhere in the body. A bare contains() fires a paid review round on any
-    # comment that just discusses "@review" in prose (it happened: a comment saying it was NOT
-    # triggering a round triggered one). Matching line-start rather than body-start keeps the
-    # normal habit of signing off a long reply with "@review" on its own line working, while an
-    # inline mention stays inert. (GitHub's startsWith/contains are case-insensitive, so
-    # "@Review" is accepted; a LEADING SPACE before @review is not - put it flush left.)
+    # Also runs when a trusted user comments "@review" -- but only as a WHOLE WORD ON ITS OWN
+    # LINE, never merely somewhere in the body. A bare contains() fires a paid review round on
+    # any comment that just discusses "@review" in prose (it happened: a comment saying it was
+    # NOT triggering a round triggered one). Matching line-start rather than body-start keeps
+    # the normal habit of signing off a long reply with "@review" on its own line working,
+    # while an inline mention stays inert.
+    #
+    # BOTH ends are anchored. Anchoring only the start still fired on "@reviewer" / "@reviews",
+    # so a member mentioning such a handle spent a paid round. GitHub expressions have no regex,
+    # so rather than test the character after the command directly, wrap the body in newlines --
+    # format('{0}{1}{0}', "\n", body) -- which turns "starts a line" into a plain contains() and
+    # makes the LAST line testable too (it has no trailing newline of its own), then require what
+    # follows to be a space, CR (the web UI submits CRLF) or LF. "@reviewer" matches none of the
+    # three. (GitHub's contains/format are case-insensitive, so "@Review" is accepted; a LEADING
+    # SPACE before @review is not - put it flush left.)
     #
     # The author_association check
     # stops strangers from triggering reviews (and spending your API credits / runner minutes) on
@@ -34,8 +42,9 @@ jobs:
       (github.event_name == 'pull_request' &&
        github.event.pull_request.user.type != 'Bot') ||
       (github.event.issue.pull_request != null &&
-       (startsWith(github.event.comment.body, '@review') ||
-        contains(github.event.comment.body, format('{0}@review', fromJson('"\n"')))) &&
+       (contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{0}', fromJson('"\n"'))) ||
+        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{1}', fromJson('"\n"'), fromJson('"\r"'))) ||
+        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review ', fromJson('"\n"')))) &&
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     # These grants are the single control point: the reusable workflow inherits exactly this set.
     # 'checks: read' is optional -- it lets the reviewer read the head commit's CI result and
