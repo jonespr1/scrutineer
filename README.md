@@ -198,7 +198,7 @@ a tab, a line end, or `,` `:` `.` `!` `?` `;` after it. That is what keeps a com
 *discussing* `@review` from spending a paid round, and stops `@reviewer`, `@reviews` or
 `@review-bot` firing one.
 
-Four limitations follow from GitHub expressions having no regex, and are worth knowing:
+Three limitations follow from GitHub expressions having no regex, and are worth knowing:
 
 - **A fenced code block still fires.** Showing someone the command, flush left inside ```` ``` ````,
   spends a round — the fence lines are just newlines as far as the match is concerned.
@@ -207,6 +207,8 @@ Four limitations follow from GitHub expressions having no regex, and are worth k
   invocation needs meaning, not matching.
 - **Indented `@review` does not fire.** Inside a list item, a blockquote, or behind any leading
   whitespace, it is inert. Put it flush left.
+A fourth is a trigger-design choice rather than a matching limit:
+
 - **Opening a draft PR fires a review**, because the trigger is on `opened`. Swap `opened` for
   `ready_for_review` in your caller if drafts should not be reviewed.
 

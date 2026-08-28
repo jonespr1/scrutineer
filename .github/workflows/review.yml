@@ -510,7 +510,14 @@ jobs:
             # exists to avoid. 20000 is far under the structural ceiling (the 200,000-char diff
             # cap plus CONTEXT_BUDGET, ~200k tokens) and above any diff worth trimming.
             # Seen on brand-assure-screen-api#108: 7,698 tokens in, 32,000 out, on ONE workflow file.
-            if [ "$pt_in" -gt 0 ] && [ "$pt_in" -lt 20000 ]; then
+            #
+            # But ONLY when the cap is not itself the obvious lever. A repo that sets
+            # OPENROUTER_MAXTOKENS=4000 and then hits it on a small PR has a deterministic
+            # failure, not a variable one: "re-run" re-spends against the same cap, and the
+            # advice would never mention the cap the operator explicitly chose. In that case
+            # fall through to the tps/window logic, which names it.
+            if [ "$pt_in" -gt 0 ] && [ "$pt_in" -lt 20000 ] \
+               && { [ -z "${MT:-}" ] || [ "$MT" -ge 20000 ]; }; then
               printf 'The payload is NOT the problem here: this prompt was only %s tokens, against a ceiling of roughly 200,000. The model over-generated for the size of the diff rather than running out of room for it. Re-run the review - output length varies a lot between hosts and between runs on the same host - or pin this slot to a different model. Trimming the diff will not help.' "$pt_in"
               return
             fi

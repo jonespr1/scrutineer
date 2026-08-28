@@ -200,6 +200,11 @@ a_has    'small prompt: recommends a re-run'                   500 600 32000 769
 a_has    'small prompt: rules out trimming explicitly'         500 600 32000 7698 'Trimming the diff will not help'
 # ...but a genuinely large payload must still get payload advice, so the branch cannot swallow it.
 a_has    'large prompt still gets the payload remedy'          550 600 32000 205131 'Reduce the payload instead'
+# ...and a small prompt must NOT swallow the case where the operator set a low cap themselves.
+# With OPENROUTER_MAXTOKENS=4000 the failure is deterministic, so "re-run" re-spends against the
+# same cap and never names the lever the operator actually controls.
+a_has    'low cap + small prompt: names the cap, not a re-run'  60 600 4000 8000 'OPENROUTER_MAXTOKENS'
+a_has    'low cap + small prompt: does not claim over-generation' 60 600 4000 8000 'tokens within the 600s timeout'
 
 [ "$fails" -eq 0 ] && echo "All routing tests passed." || echo "Some routing tests FAILED." >&2
 exit "$fails"

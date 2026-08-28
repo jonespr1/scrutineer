@@ -104,6 +104,8 @@ check '@review, ... is a trigger, not activity'         yes 'gemini-flash-latest
       "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review, please look again"')"
 check '@review: ... is a trigger, not activity'         yes 'gemini-flash-latest' \
       "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review: please look again"')"
+check '@review. is a trigger, not activity'             yes 'gemini-flash-latest' \
+      "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review."')"
 check '@review! is a trigger, not activity'             yes 'gemini-flash-latest' \
       "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review!"')"
 check '@review? is a trigger, not activity'             yes 'gemini-flash-latest' \

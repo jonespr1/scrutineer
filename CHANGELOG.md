@@ -46,7 +46,7 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
 
   This is the second time these two layers have drifted in opposite directions. The comment in
   `review.yml` now says explicitly that they must move together, and `dedupe_test.sh` pins all six
-  punctuation forms.
+  punctuation forms (`,` `:` `.` `!` `?` `;`).
 
 ### Documented
 - **The `author_association` comment was wrong.** It claimed the check "stops strangers from
@@ -55,10 +55,12 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   fifteen rollout PRs by `z-ai/glm-5.3-flash`. The behaviour is deliberate (auto-review is the
   point); the claim was not true, and is now stated accurately along with the fork consequence.
 
-- **Three limitations of a regex-free matcher**, now stated in the README and the caller comment,
-  and pinned by `tests/trigger_test.sh` so they stay deliberate: `@review` flush-left inside a
-  fenced code block **does** fire (found by `z-ai/glm-5.3-flash`), indented `@review` does **not**,
-  and opening a draft PR fires a review.
+- **Four limitations**, now stated in the README and the caller comment. Three follow from the
+  matcher having no regex, and all three are pinned by `tests/trigger_test.sh` so they stay
+  deliberate: `@review` flush-left inside a fenced code block **does** fire (found by
+  `z-ai/glm-5.3-flash`), a line **starting** with `@review ` fires even as prose about the command,
+  and indented `@review` does **not** fire. The fourth — opening a draft PR fires a review — is a
+  trigger-design choice rather than a matching limit, and cannot be pinned by that test.
 
 - **Corrected the case-insensitivity note.** It claimed "contains/format are case-insensitive".
   Only `contains()` is a comparison; `format()` is a string builder. Two reviewers disagreed about

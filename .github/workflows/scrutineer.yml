@@ -36,7 +36,8 @@ jobs:
     # all still fire. "@reviewer" matches none of them - an @-handle continues with a letter,
     # digit or hyphen, and none of those is a delimiter.
     #
-    # KNOWN LIMITATIONS, all consequences of there being no regex here:
+    # KNOWN LIMITATIONS. The first three follow from there being no regex here; the fourth is a
+    # trigger-design choice, listed with them because it surprises people the same way:
     #   - @review flush-left inside a fenced code block DOES fire. A comment demonstrating the
     #     command to someone spends a round. There is no way to strip fences in an expression.
     #   - A line STARTING with "@review " fires even when it is prose about the command
