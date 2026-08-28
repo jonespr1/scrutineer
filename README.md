@@ -5,7 +5,7 @@
 > *A thorough second pair of eyes on every pull request.*
 
 Scrutineer posts a structured review on your PRs (grouped by severity, with concrete fixes)
-using **Google Gemini, GLM 5.2, or any model on [OpenRouter](https://openrouter.ai)**. It runs
+using **Google Gemini, GLM 5.3 Flash, or any model on [OpenRouter](https://openrouter.ai)**. It runs
 entirely in GitHub Actions with your own API key(s). No third-party app to install, no data
 sent anywhere except the model provider you choose, and you control cost, host, and privacy
 down to the routing level.
@@ -20,7 +20,7 @@ this:
 
 > Set up the Scrutineer code reviewer from https://github.com/jonespr1/scrutineer on this
 > repository. Read that repo's README for the exact steps, then:
-> 1. Ask me which model(s) I want to review with (Gemini, GLM 5.2, or both), and get any API
+> 1. Ask me which model(s) I want to review with (Gemini, GLM 5.3 Flash, or both), and get any API
 >    keys you need from me.
 > 2. Add my key(s) as GitHub repository secrets.
 > 3. Add the caller workflow and set the `REVIEWERS` configuration variable.
@@ -126,7 +126,7 @@ OpenRouter can route the same model to many hosts at wildly different prices, qu
 - **Redundancy.** Requests use `allow_fallbacks` and OpenRouter auto-skips hosts with recent
   errors, so no single host is a point of failure.
 
-**Recommended for GLM 5.2** (reputable, non-Chinese, fp8, cheapest-first with failover):
+**Recommended for GLM** (reputable, non-Chinese, fp8, cheapest-first with failover):
 ```
 OPENROUTER_HOSTS = novita,fireworks,together,gmicloud
 OPENROUTER_SORT  = price
@@ -144,7 +144,8 @@ Reviews are a single API call each. Rough per-review cost (a medium PR):
 
 | Model | approx per review |
 |---|---|
-| GLM 5.2 (OpenRouter, cheapest host) | ~1 to 2 cents |
+| GLM 5.3 Flash (OpenRouter, default) | ~2 cents |
+| GLM 5.2 (OpenRouter) | ~9 cents |
 | Gemini Pro (`gemini-pro-latest`, default) | ~5 to 8 cents |
 | Gemini Flash (`gemini-flash-latest`) | ~2 to 5 cents |
 

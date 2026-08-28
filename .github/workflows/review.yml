@@ -8,15 +8,15 @@
 #   REVIEWERS       Comma-separated list of reviewer "slots" (typically 1-3). Each slot is either:
 #                     gemini                -> Google Gemini API direct (model = GEMINI_MODEL)
 #                     gemini:<model>        -> Google Gemini API direct, specific model
-#                     <openrouter-model-id> -> via OpenRouter, e.g. z-ai/glm-5.2 or
+#                     <openrouter-model-id> -> via OpenRouter, e.g. z-ai/glm-5.3-flash or
 #                                              google/gemini-2.5-flash
 #                   Default: "gemini, z-ai/glm-5.3-flash, minimax/minimax-m3" (Flash + GLM + MiniMax).
 #                   Multiple slots = independent, diverse second opinions. A repo overrides this
 #                   (e.g. REVIEWERS = gemini for a Gemini-only repo with no OpenRouter key).
 #                   Examples:
 #                     REVIEWERS = gemini
-#                     REVIEWERS = gemini, z-ai/glm-5.2
-#                     REVIEWERS = google/gemini-2.5-flash, z-ai/glm-5.2
+#                     REVIEWERS = gemini, z-ai/glm-5.3-flash
+#                     REVIEWERS = google/gemini-2.5-flash, z-ai/glm-5.3-flash
 #   GEMINI_MODEL    Model for a bare "gemini" slot (default: gemini-flash-latest).
 #   GEMINI_THINKING Reasoning budget for Gemini slots, in tokens; -1 lets the model decide.
 #                   UNSET BY DEFAULT, which does NOT mean "no thinking": current Gemini models think
