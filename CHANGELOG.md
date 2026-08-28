@@ -5,6 +5,27 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.6.0 (pending)
+
+### Changed
+- **The default GLM slot moves from `z-ai/glm-5.2` to `z-ai/glm-5.3-flash`.** 5.3-flash is the
+  graduated form of the `stealth/ox-alpha` model that reviewed across this estate during its testing
+  period, where it repeatedly found issues the rest of the panel missed. It is substantially cheaper
+  — list price **$0.075/$0.25 per 1M tokens against 5.2's $1.19/$3.74**, roughly 15x — though the
+  realised saving is smaller because it writes more: measured on `Sell-Faster-on-eBay#96`,
+  **$0.019 against $0.093**, about 5x.
+
+  **It is markedly slower.** On that same PR: 298s against 5.2's 48s, at roughly 87 tok/s. That
+  consumes half the 600s per-call window, so on a diff much larger than ~37,000 input tokens it is
+  the slot most likely to hit the timeout. Repos with consistently large PRs may prefer to pin
+  `REVIEWERS` to `z-ai/glm-5.2`, which remains available.
+
+  Verified to serve under the default privacy posture (`zdr: true`, `data_collection: deny`) before
+  this change was made — the stealth endpoint did not, and that turned out to be a property of the
+  stealth infrastructure rather than of the model.
+
+  Only affects repos that inherit the default. A repo pinning `REVIEWERS` keeps whatever it names.
+
 ## v1.5.0 (pending)
 
 ### Fixed

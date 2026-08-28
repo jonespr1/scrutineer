@@ -14,7 +14,7 @@
   One or more "owner/repo" to onboard.
 
 .PARAMETER Reviewers
-  The REVIEWERS value, e.g. "gemini", "gemini,z-ai/glm-5.2", "google/gemini-2.5-flash,z-ai/glm-5.2".
+  The REVIEWERS value, e.g. "gemini", "gemini,z-ai/glm-5.3-flash", "google/gemini-2.5-flash,z-ai/glm-5.3-flash".
   Use "default" (the default) to DELETE the repo's REVIEWERS variable so it inherits the
   reviewer set defined in review.yml. Prefer that: a pinned variable stops a future change to
   the default panel from ever reaching the repo - the same trap as a stale host allow-list.
@@ -36,7 +36,7 @@
   ./setup.ps1 -Repos me/app -Reviewers "gemini"  # pin this repo to one model
 
 .EXAMPLE
-  ./setup.ps1 -Repos me/app,me/lib -Reviewers "gemini,z-ai/glm-5.2" -OpenRouterHosts "novita,fireworks,together,gmicloud"
+  ./setup.ps1 -Repos me/app,me/lib -Reviewers "gemini,z-ai/glm-5.3-flash" -OpenRouterHosts "novita,fireworks,together,gmicloud"
 #>
 [CmdletBinding()]
 param(

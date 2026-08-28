@@ -5,7 +5,7 @@
 > *A thorough second pair of eyes on every pull request.*
 
 Scrutineer posts a structured review on your PRs (grouped by severity, with concrete fixes)
-using **Google Gemini, GLM 5.2, or any model on [OpenRouter](https://openrouter.ai)**. It runs
+using **Google Gemini, GLM 5.3 Flash, or any model on [OpenRouter](https://openrouter.ai)**. It runs
 entirely in GitHub Actions with your own API key(s). No third-party app to install, no data
 sent anywhere except the model provider you choose, and you control cost, host, and privacy
 down to the routing level.
@@ -20,7 +20,7 @@ this:
 
 > Set up the Scrutineer code reviewer from https://github.com/jonespr1/scrutineer on this
 > repository. Read that repo's README for the exact steps, then:
-> 1. Ask me which model(s) I want to review with (Gemini, GLM 5.2, or both), and get any API
+> 1. Ask me which model(s) I want to review with (Gemini, GLM 5.3 Flash, or both), and get any API
 >    keys you need from me.
 > 2. Add my key(s) as GitHub repository secrets.
 > 3. Add the caller workflow and set the `REVIEWERS` configuration variable.
@@ -79,9 +79,9 @@ either `gemini` (direct Google), `gemini:<model>`, or an **OpenRouter model id**
 | Mode | `REVIEWERS` | Keys needed |
 |---|---|---|
 | Gemini only | `gemini` *(default)* | `GEMINI_API_KEY` |
-| Gemini plus GLM (dual) | `gemini, z-ai/glm-5.2` | both |
-| Two models, one account | `google/gemini-2.5-flash, z-ai/glm-5.2` | `OPENROUTER_API_KEY` |
-| GLM only | `z-ai/glm-5.2` | `OPENROUTER_API_KEY` |
+| Gemini plus GLM (dual) | `gemini, z-ai/glm-5.3-flash` | both |
+| Two models, one account | `google/gemini-2.5-flash, z-ai/glm-5.3-flash` | `OPENROUTER_API_KEY` |
+| GLM only | `z-ai/glm-5.3-flash` | `OPENROUTER_API_KEY` |
 
 Two slots means two independent reviews posted on the PR. Each can be any model; different
 training lineages catch different issues.
@@ -126,11 +126,18 @@ OpenRouter can route the same model to many hosts at wildly different prices, qu
 - **Redundancy.** Requests use `allow_fallbacks` and OpenRouter auto-skips hosts with recent
   errors, so no single host is a point of failure.
 
-**Recommended for GLM 5.2** (reputable, non-Chinese, fp8, cheapest-first with failover):
+**Recommended for GLM** (reputable, non-Chinese, fp8, cheapest-first with failover):
 ```
 OPENROUTER_HOSTS = novita,fireworks,together,gmicloud
 OPENROUTER_SORT  = price
 ```
+
+Note that **Fireworks does not currently serve `glm-5.3-flash`** (it serves 5.2). The list is
+still correct for both — an allow-list entry that cannot serve the model is inert, and the other
+three leave enough redundancy — but on 5.3-flash you are choosing between three hosts, not four.
+Verify with `https://openrouter.ai/api/v1/models/<model>/endpoints` before narrowing it further:
+an allow-list naming only hosts that do not serve your model produces "no host matched the current
+routing constraints" rather than a review.
 
 > **Data residency note.** For strict compliance (for example EU data residency), prefer the
 > direct Gemini slot (Google offers residency controls) over routing via OpenRouter, which adds
@@ -144,7 +151,8 @@ Reviews are a single API call each. Rough per-review cost (a medium PR):
 
 | Model | approx per review |
 |---|---|
-| GLM 5.2 (OpenRouter, cheapest host) | ~1 to 2 cents |
+| GLM 5.3 Flash (OpenRouter, default GLM slot) | ~2 cents |
+| GLM 5.2 (OpenRouter) | ~9 cents |
 | Gemini Pro (`gemini-pro-latest`, default) | ~5 to 8 cents |
 | Gemini Flash (`gemini-flash-latest`) | ~2 to 5 cents |
 
@@ -218,7 +226,7 @@ default branch is protected:
 ```powershell
 # Gemini on some repos, GLM on others:
 ./setup.ps1 -Repos you/app -Reviewers "gemini"
-./setup.ps1 -Repos you/side-project -Reviewers "z-ai/glm-5.2" -OpenRouterHosts "novita,fireworks,together,gmicloud"
+./setup.ps1 -Repos you/side-project -Reviewers "z-ai/glm-5.3-flash" -OpenRouterHosts "novita,fireworks,together,gmicloud"
 ```
 
 ---
