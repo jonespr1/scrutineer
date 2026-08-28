@@ -28,12 +28,14 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   working to a **silent no-op**, which is the worst failure mode this trigger has (the commenter
   gets no feedback at all). Raised by `minimax/minimax-m3` on the PR.
 
+  **The trigger lives in the caller, so this does not ship via `@v1`.** Onboarded repos keep the
+  old trigger until their `.github/workflows/scrutineer.yml` is refreshed from
+  `examples/scrutineer.yml`. The de-dupe fix below *does* ship via `@v1`.
+
 - **README now states the latency trade-off of the default GLM slot.** The cost table advertised
   GLM 5.3 Flash at ~2 cents with no mention that it is ~6x slower than 5.2 (298s vs 48s measured),
   making it the default slot most likely to hit the 600s call ceiling on a large diff. That was
   documented in the v1.6.0 changelog entry but not where someone choosing a panel would see it.
-
-  Accepted delimiters are a space, tab, LF, CR and `,` `:` `.`
 
 - **A reply beginning "@reviewer…" no longer silences the round the developer then asks for.**
   `already_reviewed()` decided whether a comment counted as new developer activity with
@@ -53,9 +55,6 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   `gemini` slot back to Flash; the docs were never updated. Verified against the git history rather
   than assumed — the code is right and the docs were stale, not the reverse. Also raised by
   `z-ai/glm-5.3-flash`.
-
-  **This lives in the caller, so it does not ship via `@v1`.** Onboarded repos keep the old trigger
-  until their `.github/workflows/scrutineer.yml` is updated from `examples/scrutineer.yml`.
 
 ## v1.6.0 (pending)
 

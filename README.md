@@ -84,7 +84,8 @@ that panel and follows it as the default moves.
 
 | Mode | `REVIEWERS` | Keys needed |
 |---|---|---|
-| Gemini only | `gemini` *(default)* | `GEMINI_API_KEY` |
+| Three-slot panel *(default)* | *(leave unset)* | both |
+| Gemini only | `gemini` | `GEMINI_API_KEY` |
 | Gemini plus GLM (dual) | `gemini, z-ai/glm-5.3-flash` | both |
 | Two models, one account | `google/gemini-2.5-flash, z-ai/glm-5.3-flash` | `OPENROUTER_API_KEY` |
 | GLM only | `z-ai/glm-5.3-flash` | `OPENROUTER_API_KEY` |

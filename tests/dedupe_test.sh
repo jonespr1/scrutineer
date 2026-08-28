@@ -100,6 +100,10 @@ check 'a bare @review does not re-open it'              yes 'gemini-flash-latest
       "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review"')"
 check '@review with a slot filter does not re-open it'  yes 'gemini-flash-latest' \
       "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review glm"')"
+check '@review, ... is a trigger, not activity'         yes 'gemini-flash-latest' \
+      "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review, please look again"')"
+check '@review: ... is a trigger, not activity'         yes 'gemini-flash-latest' \
+      "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review: please look again"')"
 # A reply that merely STARTS with the word "@reviewer" is substantive developer activity, not a
 # trigger. startswith("@review") swallowed it, so the round the developer then asked for was
 # skipped as "already reviewed" and their counter-argument never reached the model.
