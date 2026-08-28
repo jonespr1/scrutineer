@@ -16,13 +16,14 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   GitHub expressions have no regex, so rather than test the character following the command, the
   body is wrapped in newlines — `format('{0}{1}{0}', "\n", body)`. That turns "starts a line" into a
   plain `contains()` and, unlike `startsWith`, makes the *final* line testable too. What follows the
-  command must then be LF, CR (the web UI submits CRLF) or a space, so `@review glm` still works.
+  command must then be LF, CR (the web UI submits CRLF), a space or a tab, so `@review glm` and
+  `@review<TAB>glm` both still work.
 
   The de-dupe bounded the cost but did not remove it: it discounts comments starting with `@review`
   as developer activity, so `@reviewer` on an already-reviewed commit exited 0 for free — but on a
   commit not yet reviewed it spent a real round.
 
-  Accepted delimiters after the command are a space, LF, CR and `,` `:` `.` — the punctuation
+  Accepted delimiters after the command are a space, tab, LF, CR and `,` `:` `.` — the punctuation
   forms are deliberate: anchoring the end without them regressed `@review, please look` from
   working to a **silent no-op**, which is the worst failure mode this trigger has (the commenter
   gets no feedback at all). Raised by `minimax/minimax-m3` on the PR.

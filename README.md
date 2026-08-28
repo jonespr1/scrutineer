@@ -193,7 +193,7 @@ Matching is a case-insensitive substring of the model id; an unrecognised keywor
 back to running all reviewers.
 
 `@review` must be a **whole word at the start of a line** — flush left, with nothing but a space,
-a line end, or `,` `:` `.` after it. That is what keeps a comment merely *discussing* `@review`
+a tab, a line end, or `,` `:` `.` after it. That is what keeps a comment merely *discussing* `@review`
 from spending a paid round, and stops `@reviewer` or `@reviews` firing one. A leading space, or
 any other character straight after the command (`@review!`, `@review-now`), is inert.
 
