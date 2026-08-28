@@ -50,7 +50,7 @@ for f in "${FILES[@]}"; do
   miss=""
   grep -qF "format('{0}@review{0}', fromJson('\"\n\"'))" "$f" || miss="$miss LF"
   grep -qF "format('{0}@review{1}', fromJson('\"\n\"'), fromJson('\"\r\"'))" "$f" || miss="$miss CR"
-  grep -qF "format('{0}@review ', fromJson('\"\n\"'))" "$f" || miss="$miss space"
+  grep -qF "format('{0}@review{1}', fromJson('\"\n\"'), fromJson('\" \"'))" "$f" || miss="$miss space"
   grep -qF "format('{0}@review,', fromJson('\"\n\"'))" "$f" || miss="$miss comma"
   grep -qF "format('{0}@review:', fromJson('\"\n\"'))" "$f" || miss="$miss colon"
   grep -qF "format('{0}@review.', fromJson('\"\n\"'))" "$f" || miss="$miss period"

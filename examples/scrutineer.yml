@@ -47,9 +47,13 @@ jobs:
     # Only contains() is case-insensitive (format() is a string builder, not a comparison), and
     # that is what makes "@Review" work.
     #
-    # The author_association check
-    # stops strangers from triggering reviews (and spending your API credits / runner minutes) on
-    # public repos. To review bot PRs automatically too, drop the `user.type != 'Bot'` clause.
+    # The author_association check gates the COMMENT path ONLY. It stops strangers commenting
+    # "@review" to spend your API credits on a public repo. It does NOT gate the PR-open path
+    # above: on a public repo, any non-bot author opening a PR fires a round. That is deliberate
+    # (auto-review is the point), but know the consequence - and note GitHub withholds secrets
+    # from a fork's pull_request run, so a fork PR gets the "no API key configured" notice and
+    # exits 0 rather than a review. Add an author_association check to the first branch too if
+    # you want the PR-open path gated. To review bot PRs automatically, drop `user.type != 'Bot'`.
     if: >-
       (github.event_name == 'pull_request' &&
        github.event.pull_request.user.type != 'Bot') ||
@@ -57,7 +61,7 @@ jobs:
        github.event.comment.user.type != 'Bot' &&
        (contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{0}', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{1}', fromJson('"\n"'), fromJson('"\r"'))) ||
-        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review ', fromJson('"\n"'))) ||
+        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{1}', fromJson('"\n"'), fromJson('" "'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review,', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review:', fromJson('"\n"'))) ||
         contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review.', fromJson('"\n"'))) ||

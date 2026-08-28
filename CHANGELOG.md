@@ -19,7 +19,20 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   made *more* likely, not less. `github.event.comment.user.type != 'Bot'` now guards it. This was
   already carried as a local customisation in `orange_france`; the template has adopted it.
 
+- **The space delimiter is no longer an invisible trailing space.** It was written as
+  `format('{0}@review ', ...)` — a space inside a quoted string, invisible in diffs, blame and
+  review. `z-ai/glm-5.3-flash` pointed out on `Sell-Faster-on-eBay#103` that a reformatter or a
+  careless edit dropping it degrades the needle to `\n@review`, which is a prefix of
+  `\n@reviewer` — silently reintroducing the exact bug this work exists to fix. It is now
+  `fromJson('" "')`, consistent with the CR and tab clauses and visible to a reader.
+
 ### Documented
+- **The `author_association` comment was wrong.** It claimed the check "stops strangers from
+  triggering reviews (and spending your API credits / runner minutes) on public repos". It gates
+  the **comment path only** — the PR-open path fires for any non-bot author. Raised on six of the
+  fifteen rollout PRs by `z-ai/glm-5.3-flash`. The behaviour is deliberate (auto-review is the
+  point); the claim was not true, and is now stated accurately along with the fork consequence.
+
 - **Three limitations of a regex-free matcher**, now stated in the README and the caller comment,
   and pinned by `tests/trigger_test.sh` so they stay deliberate: `@review` flush-left inside a
   fenced code block **does** fire (found by `z-ai/glm-5.3-flash`), indented `@review` does **not**,

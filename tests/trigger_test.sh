@@ -39,6 +39,7 @@ recover_delims() {
         case "$line" in
           *'"\r"'*) DELIMS+=($'\r') ;;
           *'"\t"'*) DELIMS+=($'\t') ;;
+          *'" "'*)   DELIMS+=(' ') ;;
           *)        bad "unrecognised {1} placeholder: $line" ;;
         esac ;;
       ?) DELIMS+=("$tok") ;;                          # a single literal char (space , : .)
