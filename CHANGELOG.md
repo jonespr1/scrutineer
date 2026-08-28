@@ -26,6 +26,16 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   `\n@reviewer` — silently reintroducing the exact bug this work exists to fix. It is now
   `fromJson('" "')`, consistent with the CR and tab clauses and visible to a reader.
 
+- **The de-dupe's activity rule now carries the same delimiter set as the trigger.** Adding `!` `?`
+  `;` to the trigger without adding them here made the two layers disagree: `@review!` was a valid
+  command to the trigger but *developer activity* to `already_reviewed()`, so it bypassed the skip
+  and spent a full paid round on an already-reviewed, unchanged commit — where a plain `@review`
+  correctly exits green. Caught by `minimax/minimax-m3` on the PR that introduced it, before merge.
+
+  This is the second time these two layers have drifted in opposite directions. The comment in
+  `review.yml` now says explicitly that they must move together, and `dedupe_test.sh` pins all six
+  punctuation forms.
+
 ### Documented
 - **The `author_association` comment was wrong.** It claimed the check "stops strangers from
   triggering reviews (and spending your API credits / runner minutes) on public repos". It gates

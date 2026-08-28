@@ -676,8 +676,11 @@ jobs:
           # new developer activity since? If so, skip it. A bare repeat "@review" on an unchanged commit
           # is a no-op; a new commit (SHA changes) or a substantive reply (not just "@review") re-triggers.
           #
-          # The "is this just a trigger?" test matches @review as a WHOLE WORD, the same rule the
-          # caller's trigger uses. startswith("@review") also swallowed "@reviewer..." - so a
+          # The "is this just a trigger?" test matches @review as a WHOLE WORD, with the SAME
+          # delimiter set the caller's trigger uses. The two must not drift: a delimiter the
+          # trigger accepts but this does not turns a bare repeat command into "developer
+          # activity", so it bypasses the skip below and spends a full round on an unchanged
+          # commit. That is exactly what "@review!" did between v1.6.1 and v1.6.2. startswith("@review") also swallowed "@reviewer..." - so a
           # substantive reply opening with that word counted as no activity, and the @review that
           # followed it was skipped as "already reviewed". The reviewer never saw the reply and the
           # requested round silently did not happen.
@@ -710,7 +713,7 @@ jobs:
               | if $a==null then false
                 else ([ .[] | select(.user.type=="User"
                           and (.created_at > $a.created_at)
-                          and ((body|ascii_downcase|gsub("^\\s+";"")|test("^@review([[:space:],:.]|$)"))|not)) ] | length) == 0
+                          and ((body|ascii_downcase|gsub("^\\s+";"")|test("^@review([[:space:],:.!?;]|$)"))|not)) ] | length) == 0
                 end' >/dev/null 2>&1
           }
 
