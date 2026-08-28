@@ -191,5 +191,15 @@ a_hasnot 'no cap set: does not discuss a cap we did not set'   550 600 ''    205
 a_has    'reports the prompt size'                             550 600 32000 205131 '205131 tokens'
 a_has    'names both halves of the payload ceiling'            550 600 32000 205131 'CONTEXT_BUDGET'
 
+# A small prompt cannot be what ran out of room, so payload advice is the wrong remedy. Observed on
+# brand-assure-screen-api#108: 7,698 tokens in, 32,000 out, on a SINGLE workflow file. The message
+# told the reader to trim a diff that had nothing to trim - the exact wrong-remedy failure this
+# function exists to prevent, reappearing from the input side rather than the output side.
+a_has    'small prompt: says the payload is not the problem'   500 600 32000 7698 'payload is NOT the problem'
+a_has    'small prompt: recommends a re-run'                   500 600 32000 7698 'Re-run the review'
+a_has    'small prompt: rules out trimming explicitly'         500 600 32000 7698 'Trimming the diff will not help'
+# ...but a genuinely large payload must still get payload advice, so the branch cannot swallow it.
+a_has    'large prompt still gets the payload remedy'          550 600 32000 205131 'Reduce the payload instead'
+
 [ "$fails" -eq 0 ] && echo "All routing tests passed." || echo "Some routing tests FAILED." >&2
 exit "$fails"

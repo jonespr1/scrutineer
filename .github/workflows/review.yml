@@ -504,6 +504,16 @@ jobs:
             case "$pt_in" in ''|*[!0-9]*) pt_in=0 ;; esac
             local sz=""
             [ "$pt_in" -gt 0 ] && sz=" This prompt was ${pt_in} tokens (the payload ceiling is the 200,000-char diff cap plus CONTEXT_BUDGET)."
+            # A small prompt cannot be the thing that ran out of room. Below this, the model
+            # over-generated for the diff it was given - so "trim the payload" sends the reader
+            # somewhere with nothing to trim, which is the wrong-remedy failure this function
+            # exists to avoid. 20000 is far under the structural ceiling (the 200,000-char diff
+            # cap plus CONTEXT_BUDGET, ~200k tokens) and above any diff worth trimming.
+            # Seen on brand-assure-screen-api#108: 7,698 tokens in, 32,000 out, on ONE workflow file.
+            if [ "$pt_in" -gt 0 ] && [ "$pt_in" -lt 20000 ]; then
+              printf 'The payload is NOT the problem here: this prompt was only %s tokens, against a ceiling of roughly 200,000. The model over-generated for the size of the diff rather than running out of room for it. Re-run the review - output length varies a lot between hosts and between runs on the same host - or pin this slot to a different model. Trimming the diff will not help.' "$pt_in"
+              return
+            fi
             # No cap set, so the model stopped on its own limit; only the payload is ours to change.
             if [ -z "${MT:-}" ]; then
               printf 'No OPENROUTER_MAXTOKENS is set, so the model stopped on its own output limit - reduce the payload (DIFF_EXCLUDE, a lower CONTEXT_BUDGET, or a smaller PR).%s' "$sz"
