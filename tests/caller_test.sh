@@ -41,10 +41,14 @@ for f in "${FILES[@]}"; do
   fi
 
   # 2. ...and all ten trailing delimiters must be present. Dropping any one silently breaks a
-  #    real invocation with NO feedback to the commenter: LF and CR for "@review" followed by more
-  #    text (the web UI submits CRLF), the space form for an argument ("@review glm"), and , : .
-  #    for natural phrasing ("@review, please look"). Anchoring the end without these regressed
-  #    "@review," from working to a silent no-op, which is the worst failure mode this has. Pinned to the shipped implementation
+  #    real invocation with NO feedback to the commenter:
+  #      LF, CR   "@review" followed by more text (the web UI submits CRLF)
+  #      space    an argument, "@review glm"
+  #      tab      the same, tab-separated - review.yml's filter grep accepts it
+  #      , : .    natural phrasing, "@review, please look"
+  #      ! ? ;    the same, omitted at first and raised on seven of the fifteen rollout PRs
+  #    Anchoring the end without these regressed "@review," from working into a silent no-op,
+  #    which is the worst failure mode this trigger has. Pinned to the shipped implementation
   #    deliberately: if this is ever rewritten, update these patterns in the same commit so the
   #    test keeps testing what actually ships, not a stale implementation detail.
   miss=""

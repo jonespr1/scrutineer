@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Behavioural test for the @review trigger.
 #
-# tests/caller_test.sh asserts the seven delimiter PATTERNS are present in each caller. That
+# tests/caller_test.sh asserts the ten delimiter PATTERNS are present in each caller. That
 # catches a dropped alternative, but not a typo INSIDE one: `format('{0}@rewiew ', ...)` still
 # looks like a pattern and still counts. Only a real Actions run would catch that - or this,
 # which recovers the delimiter set from the shipped expression and then drives real comment
@@ -42,7 +42,7 @@ recover_delims() {
           *'" "'*)   DELIMS+=(' ') ;;
           *)        bad "unrecognised {1} placeholder: $line" ;;
         esac ;;
-      ?) DELIMS+=("$tok") ;;                          # a single literal char (space , : .)
+      ?) DELIMS+=("$tok") ;;                          # a single literal char: , : . ! ? ;
       *) bad "unrecognised delimiter token '$tok'" ;;
     esac
   done < <(grep -F 'contains(format' "$f" | grep -F '@review')
