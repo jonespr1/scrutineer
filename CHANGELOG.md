@@ -5,6 +5,57 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.6.1 (pending)
+
+### Fixed
+- **The `@review` command is now anchored at both ends, not just the start.** `startsWith(body,
+  '@review')` also matched `@reviewer`, `@reviews` and `@reviewership`, so a member mentioning any
+  such handle spent a full paid review round. Found by `z-ai/glm-5.3-flash` reviewing the caller on
+  `jonespr1/buildingsaas#1` — the only slot of three to catch it.
+
+  GitHub expressions have no regex, so rather than test the character following the command, the
+  body is wrapped in newlines — `format('{0}{1}{0}', "\n", body)`. That turns "starts a line" into a
+  plain `contains()` and, unlike `startsWith`, makes the *final* line testable too. What follows the
+  command must then be LF, CR (the web UI submits CRLF), a space or a tab, so `@review glm` and
+  `@review<TAB>glm` both still work.
+
+  The de-dupe bounded the cost but did not remove it: it discounts comments starting with `@review`
+  as developer activity, so `@reviewer` on an already-reviewed commit exited 0 for free — but on a
+  commit not yet reviewed it spent a real round.
+
+  Accepted delimiters after the command are a space, tab, LF, CR and `,` `:` `.` — the punctuation
+  forms are deliberate: anchoring the end without them regressed `@review, please look` from
+  working to a **silent no-op**, which is the worst failure mode this trigger has (the commenter
+  gets no feedback at all). Raised by `minimax/minimax-m3` on the PR.
+
+  **The trigger lives in the caller, so this does not ship via `@v1`.** Onboarded repos keep the
+  old trigger until their `.github/workflows/scrutineer.yml` is refreshed from
+  `examples/scrutineer.yml`. The de-dupe fix below *does* ship via `@v1`.
+
+- **README now states the latency trade-off of the default GLM slot.** The cost table advertised
+  GLM 5.3 Flash at ~2 cents with no mention that it is ~6x slower than 5.2 (298s vs 48s measured),
+  making it the default slot most likely to hit the 600s call ceiling on a large diff. That was
+  documented in the v1.6.0 changelog entry but not where someone choosing a panel would see it.
+
+- **A reply beginning "@reviewer…" no longer silences the round the developer then asks for.**
+  `already_reviewed()` decided whether a comment counted as new developer activity with
+  `startswith("@review")`, which also swallowed `@reviewer` and `@reviews`. Concrete path: the bot
+  reviews commit A → a member replies *"@reviewer's timeout point is wrong, I fixed X"* → the member
+  comments `@review` → the trigger fires, but the de-dupe finds no qualifying activity since the
+  last review at A, skips every slot and exits green. **The requested re-review silently did not
+  happen and the counter-argument never reached the model.** The activity test now uses the same
+  whole-word rule as the trigger. Found by `z-ai/glm-5.3-flash`.
+
+  Note this hole was *masked* until now: before the trigger was anchored, such a reply
+  accidentally fired a round of its own.
+
+- **README no longer documents defaults the code abandoned.** The configuration table claimed
+  `REVIEWERS` defaults to `gemini` ("1 to 2 slots") and `GEMINI_MODEL` to `gemini-pro-latest`.
+  Both were true until `4c2e257` moved the central default to the three-slot panel and the bare
+  `gemini` slot back to Flash; the docs were never updated. Verified against the git history rather
+  than assumed — the code is right and the docs were stale, not the reverse. Also raised by
+  `z-ai/glm-5.3-flash`.
+
 ## v1.6.0 (pending)
 
 ### Changed

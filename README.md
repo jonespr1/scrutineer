@@ -65,7 +65,8 @@ Copy [`examples/scrutineer.yml`](examples/scrutineer.yml) into your repo at
 `.github/workflows/scrutineer.yml`. That is the only file you add.
 
 **4. (Optional) Choose your model(s)**
-Set the `REVIEWERS` repository Variable (defaults to `gemini`). See the next section.
+Leave `REVIEWERS` unset and you get the default three-slot panel:
+`gemini, z-ai/glm-5.3-flash, minimax/minimax-m3`. See the next section to change it.
 
 Open a pull request and you get a review. Comment `@review` any time for a fresh pass.
 
@@ -73,12 +74,18 @@ Open a pull request and you get a review. Comment `@review` any time for a fresh
 
 ## Choosing your model(s)
 
-Set the `REVIEWERS` repository Variable to a comma-separated list of 1 to 2 slots. Each slot is
+Set the `REVIEWERS` repository Variable to a comma-separated list of slots. Each slot is
 either `gemini` (direct Google), `gemini:<model>`, or an **OpenRouter model id**.
+
+Unset, it defaults to the three-slot panel `gemini, z-ai/glm-5.3-flash, minimax/minimax-m3` —
+three independent readings of the same diff, which is what catches findings a single model misses.
+`setup.ps1 -Reviewers default` deliberately *deletes* the variable so an onboarded repo inherits
+that panel and follows it as the default moves.
 
 | Mode | `REVIEWERS` | Keys needed |
 |---|---|---|
-| Gemini only | `gemini` *(default)* | `GEMINI_API_KEY` |
+| Three-slot panel *(default)* | *(leave unset)* | both |
+| Gemini only | `gemini` | `GEMINI_API_KEY` |
 | Gemini plus GLM (dual) | `gemini, z-ai/glm-5.3-flash` | both |
 | Two models, one account | `google/gemini-2.5-flash, z-ai/glm-5.3-flash` | `OPENROUTER_API_KEY` |
 | GLM only | `z-ai/glm-5.3-flash` | `OPENROUTER_API_KEY` |
@@ -95,8 +102,8 @@ unless noted.
 
 | Name | Default | Purpose |
 |---|---|---|
-| `REVIEWERS` | `gemini` | 1 to 2 reviewer slots (see above) |
-| `GEMINI_MODEL` | `gemini-pro-latest` | Model for a bare `gemini` slot. Pro is the default (materially fewer false positives); set `gemini-flash-latest` for lower cost. Use a `*-latest` alias to avoid retired-model errors |
+| `REVIEWERS` | *(unset — the three-slot panel)* | Reviewer slots (see above). Unset inherits `gemini, z-ai/glm-5.3-flash, minimax/minimax-m3` |
+| `GEMINI_MODEL` | `gemini-flash-latest` | Model for a bare `gemini` slot. Flash is the default: it partners the GLM and MiniMax slots in the default panel, where breadth comes from having three readings rather than one expensive one. Set `gemini-pro-latest` for materially fewer false positives at ~2-3x the cost. Use a `*-latest` alias to avoid retired-model errors |
 | `OPENROUTER_HOSTS` | *(none)* | Allow-list of host slugs for OpenRouter slots, e.g. `novita,fireworks,together,gmicloud` |
 | `OPENROUTER_SORT` | `price` | `price` \| `throughput` \| `latency` - how to pick among eligible hosts. `throughput` is a good choice for slower reasoning models |
 | `OPENROUTER_MAXPRICE` | *(none)* | Hard ceiling `"$in,$out"` per 1M tokens, e.g. `"2,6"` |
@@ -151,10 +158,15 @@ Reviews are a single API call each. Rough per-review cost (a medium PR):
 
 | Model | approx per review |
 |---|---|
-| GLM 5.3 Flash (OpenRouter, default GLM slot) | ~2 cents |
+| GLM 5.3 Flash (OpenRouter, default GLM slot) | ~2 cents (but slow - see below) |
 | GLM 5.2 (OpenRouter) | ~9 cents |
-| Gemini Pro (`gemini-pro-latest`, default) | ~5 to 8 cents |
-| Gemini Flash (`gemini-flash-latest`) | ~2 to 5 cents |
+| Gemini Pro (`gemini-pro-latest`) | ~5 to 8 cents |
+| Gemini Flash (`gemini-flash-latest`, default gemini slot) | ~2 to 5 cents |
+
+**The cheapest slot is the slowest.** GLM 5.3 Flash is roughly 5x cheaper than 5.2 in practice
+but writes far more to get there: measured on one PR, **298s against 5.2's 48s**. That eats half
+the 600s per-call window, so on a large diff it is the default slot most likely to time out. Repos
+with consistently big PRs may prefer to pin `REVIEWERS` to `z-ai/glm-5.2`, which stays available.
 
 Sending each changed file's full content adds input tokens, which the figures above already
 reflect; input tokens are cheap and the quality gain is large. At typical volume this is still a
@@ -180,6 +192,11 @@ By default (see the caller workflow):
 
 Matching is a case-insensitive substring of the model id; an unrecognised keyword safely falls
 back to running all reviewers.
+
+`@review` must be a **whole word at the start of a line** — flush left, with nothing but a space,
+a tab, a line end, or `,` `:` `.` after it. That is what keeps a comment merely *discussing* `@review`
+from spending a paid round, and stops `@reviewer` or `@reviews` firing one. A leading space, or
+any other character straight after the command (`@review!`, `@review-now`), is inert.
 
 **Who can trigger it:** for security, `@review` comment triggers only run for **repo owners,
 members, and collaborators** (the caller checks `author_association`). This stops strangers from

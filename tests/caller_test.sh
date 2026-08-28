@@ -26,26 +26,46 @@ for f in "${FILES[@]}"; do
   n="${f#"$ROOT/"}"
   [ -f "$f" ] || { bad "$n: missing"; continue; }
 
-  # 1. The trigger must be anchored. A bare contains(body, '@review') fires on any comment that
-  #    merely mentions @review in prose - including one saying it is NOT requesting a review.
-  #    -F: match the parens literally, not as a regex group - a reformat (extra whitespace inside
-  #    the call) would otherwise still satisfy a regex pattern and silently stop guarding anything.
-  if grep -qF "startsWith(github.event.comment.body, '@review')" "$f"; then
-    ok "$n: trigger anchored with startsWith"
+  # 1. The command must be matched as a WHOLE WORD ON ITS OWN LINE - both ends anchored.
+  #    Two regressions are possible here and both spend real money:
+  #      - a bare contains(body, '@review') fires on any comment merely discussing @review;
+  #      - a start-only startsWith(body, '@review') fires on "@reviewer" / "@reviews".
+  #    The shipped form wraps the body in newlines so "starts a line" becomes a plain contains()
+  #    and the FINAL line is testable too. -F throughout: match the parens and quotes literally
+  #    rather than as a regex - a reformat (extra whitespace inside the call) would otherwise
+  #    still satisfy a regex pattern and silently stop guarding anything.
+  if grep -qF "format('{0}{1}{0}', fromJson('\"\n\"'), github.event.comment.body)" "$f"; then
+    ok "$n: command matched against the newline-padded body"
   else
-    bad "$n: trigger is not anchored - a bare contains() fires on prose mentions"
+    bad "$n: body is not newline-padded - line-start/line-end anchoring is not in force"
   fi
 
-  # 2. ...and must also match @review at the start of any LINE, so signing off a long reply with
-  #    @review on its own line still works. Without this the anchoring above breaks normal use.
-  #    Pinned to the current format(...)+fromJson('"\n"') implementation rather than the weaker
-  #    "contains a newline+@review somewhere" behaviour, deliberately: if this is ever rewritten
-  #    (e.g. a plain contains(body, '\n@review')), update this pattern in the same commit so the
+  # 2. ...and all seven trailing delimiters must be present. Dropping any one silently breaks a
+  #    real invocation with NO feedback to the commenter: LF and CR for "@review" followed by more
+  #    text (the web UI submits CRLF), the space form for an argument ("@review glm"), and , : .
+  #    for natural phrasing ("@review, please look"). Anchoring the end without these regressed
+  #    "@review," from working to a silent no-op, which is the worst failure mode this has. Pinned to the shipped implementation
+  #    deliberately: if this is ever rewritten, update these patterns in the same commit so the
   #    test keeps testing what actually ships, not a stale implementation detail.
-  if grep -qF "format('{0}@review'" "$f"; then
-    ok "$n: also matches @review at line start"
+  miss=""
+  grep -qF "format('{0}@review{0}', fromJson('\"\n\"'))" "$f" || miss="$miss LF"
+  grep -qF "format('{0}@review{1}', fromJson('\"\n\"'), fromJson('\"\r\"'))" "$f" || miss="$miss CR"
+  grep -qF "format('{0}@review ', fromJson('\"\n\"'))" "$f" || miss="$miss space"
+  grep -qF "format('{0}@review,', fromJson('\"\n\"'))" "$f" || miss="$miss comma"
+  grep -qF "format('{0}@review:', fromJson('\"\n\"'))" "$f" || miss="$miss colon"
+  grep -qF "format('{0}@review.', fromJson('\"\n\"'))" "$f" || miss="$miss period"
+  grep -qF "format('{0}@review{1}', fromJson('\"\n\"'), fromJson('\"\t\"'))" "$f" || miss="$miss tab"
+  if [ -z "$miss" ]; then
+    ok "$n: all seven @review delimiters present (LF, CR, space, tab, comma, colon, period)"
   else
-    bad "$n: missing the line-start alternative - sign-off on its own line would not trigger"
+    bad "$n: missing @review delimiter(s):$miss - those invocations would not trigger"
+  fi
+
+  # 2b. The start-only form must not come back - it is exactly what fired on "@reviewer".
+  if grep -qF "startsWith(github.event.comment.body, '@review')" "$f"; then
+    bad "$n: start-only startsWith form is back - '@reviewer' would fire a paid round"
+  else
+    ok "$n: no start-only trigger form"
   fi
 
   # 3. The naked form must not reappear alongside them. -E + \s* so a spacing variant (no space
