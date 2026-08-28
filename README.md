@@ -79,9 +79,9 @@ either `gemini` (direct Google), `gemini:<model>`, or an **OpenRouter model id**
 | Mode | `REVIEWERS` | Keys needed |
 |---|---|---|
 | Gemini only | `gemini` *(default)* | `GEMINI_API_KEY` |
-| Gemini plus GLM (dual) | `gemini, z-ai/glm-5.2` | both |
-| Two models, one account | `google/gemini-2.5-flash, z-ai/glm-5.2` | `OPENROUTER_API_KEY` |
-| GLM only | `z-ai/glm-5.2` | `OPENROUTER_API_KEY` |
+| Gemini plus GLM (dual) | `gemini, z-ai/glm-5.3-flash` | both |
+| Two models, one account | `google/gemini-2.5-flash, z-ai/glm-5.3-flash` | `OPENROUTER_API_KEY` |
+| GLM only | `z-ai/glm-5.3-flash` | `OPENROUTER_API_KEY` |
 
 Two slots means two independent reviews posted on the PR. Each can be any model; different
 training lineages catch different issues.
@@ -218,7 +218,7 @@ default branch is protected:
 ```powershell
 # Gemini on some repos, GLM on others:
 ./setup.ps1 -Repos you/app -Reviewers "gemini"
-./setup.ps1 -Repos you/side-project -Reviewers "z-ai/glm-5.2" -OpenRouterHosts "novita,fireworks,together,gmicloud"
+./setup.ps1 -Repos you/side-project -Reviewers "z-ai/glm-5.3-flash" -OpenRouterHosts "novita,fireworks,together,gmicloud"
 ```
 
 ---
