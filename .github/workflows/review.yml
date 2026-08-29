@@ -145,6 +145,41 @@ jobs:
 
           if [ -z "${PR_NUMBER:-}" ]; then echo "No PR number; nothing to review."; exit 0; fi
 
+          # The caller's if: is deliberately only a cheap PREFILTER - it fires on any comment that
+          # merely CONTAINS "@review" anywhere. The precise rule lives HERE, so changing it is a
+          # tag rather than a pull request in every consumer repo.
+          #
+          # That placement is the whole point. The matcher used to live in the caller, and moving
+          # one delimiter cost fifteen pull requests and forty-five paid review rounds. Anything
+          # that can live in this file must live in this file; see CLAUDE.md.
+          #
+          # grep works line by line, so ^ gives the line anchoring the caller previously had to
+          # fake by wrapping the body in newlines. The command must START a line and be followed
+          # by whitespace (CR included - the web UI submits CRLF), end of line, or punctuation
+          # that cannot continue an @-handle. So "@reviewer", "@reviews", "@review2" and
+          # "@review-bot" stay inert, while "@review", "@review glm", "@review, please look" and
+          # "@review!" all fire.
+          #
+          # KNOWN and not fixable by matching: a line STARTING with "@review " fires even when it
+          # is prose about the command, and "@review" flush-left inside a fenced code block fires.
+          # Telling those from an invocation needs meaning, not matching. An INDENTED "@review"
+          # does not fire.
+          #
+          # already_reviewed() below must use the same rule to decide what counts as a bare
+          # command rather than developer activity. They have drifted twice, in opposite
+          # directions - once silently skipping a requested round, once silently spending one.
+          is_review_command() {
+            printf '%s' "${1:-}" | grep -qiE '^@review([[:space:],:.!?;]|$)'
+          }
+
+          # On issue_comment the caller has only prefiltered, so apply the real rule before
+          # spending anything. Exit 0, not 1: a comment that merely mentions the command is not a
+          # failure, and a red check would be wrong.
+          if [ "${GITHUB_EVENT_NAME:-}" = "issue_comment" ] && ! is_review_command "${COMMENT_BODY:-}"; then
+            echo "No @review command at the start of a line - nothing to do."
+            exit 0
+          fi
+
           # Resolve the PR head commit (pull_request provides it; issue_comment must fetch it).
           if [ -z "${HEAD_SHA:-}" ]; then
             HEAD_SHA="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '.head.sha' 2>/dev/null || true)"

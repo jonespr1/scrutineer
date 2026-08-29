@@ -26,61 +26,38 @@ for f in "${FILES[@]}"; do
   n="${f#"$ROOT/"}"
   [ -f "$f" ] || { bad "$n: missing"; continue; }
 
-  # 1. The command must be matched as a WHOLE WORD ON ITS OWN LINE - both ends anchored.
-  #    Two regressions are possible here and both spend real money:
-  #      - a bare contains(body, '@review') fires on any comment merely discussing @review;
-  #      - a start-only startsWith(body, '@review') fires on "@reviewer" / "@reviews".
-  #    The shipped form wraps the body in newlines so "starts a line" becomes a plain contains()
-  #    and the FINAL line is testable too. -F throughout: match the parens and quotes literally
-  #    rather than as a regex - a reformat (extra whitespace inside the call) would otherwise
-  #    still satisfy a regex pattern and silently stop guarding anything.
-  if grep -qF "format('{0}{1}{0}', fromJson('\"\n\"'), github.event.comment.body)" "$f"; then
-    ok "$n: command matched against the newline-padded body"
+  # 1. The caller must carry ONLY a cheap prefilter. The precise rule belongs in review.yml,
+  #    where it ships via @v1 - see CLAUDE.md. This is the guard that keeps it there: if the
+  #    matcher creeps back into the caller, tightening it costs a pull request in every consumer
+  #    repo again, which is what this design exists to prevent.
+  if grep -qF "contains(github.event.comment.body, '@review')" "$f"; then
+    ok "$n: cheap prefilter present"
   else
-    bad "$n: body is not newline-padded - line-start/line-end anchoring is not in force"
+    bad "$n: no '@review' prefilter - the comment path will never reach review.yml"
   fi
 
-  # 2. ...and all ten trailing delimiters must be present. Dropping any one silently breaks a
-  #    real invocation with NO feedback to the commenter:
-  #      LF, CR   "@review" followed by more text (the web UI submits CRLF)
-  #      space    an argument, "@review glm"
-  #      tab      the same, tab-separated - review.yml's filter grep accepts it
-  #      , : .    natural phrasing, "@review, please look"
-  #      ! ? ;    the same, omitted at first and raised on seven of the fifteen rollout PRs
-  #    Anchoring the end without these regressed "@review," from working into a silent no-op,
-  #    which is the worst failure mode this trigger has. Pinned to the shipped implementation
-  #    deliberately: if this is ever rewritten, update these patterns in the same commit so the
-  #    test keeps testing what actually ships, not a stale implementation detail.
-  miss=""
-  grep -qF "format('{0}@review{0}', fromJson('\"\n\"'))" "$f" || miss="$miss LF"
-  grep -qF "format('{0}@review{1}', fromJson('\"\n\"'), fromJson('\"\r\"'))" "$f" || miss="$miss CR"
-  grep -qF "format('{0}@review{1}', fromJson('\"\n\"'), fromJson('\" \"'))" "$f" || miss="$miss space"
-  grep -qF "format('{0}@review,', fromJson('\"\n\"'))" "$f" || miss="$miss comma"
-  grep -qF "format('{0}@review:', fromJson('\"\n\"'))" "$f" || miss="$miss colon"
-  grep -qF "format('{0}@review.', fromJson('\"\n\"'))" "$f" || miss="$miss period"
-  grep -qF "format('{0}@review!', fromJson('\"\n\"'))" "$f" || miss="$miss bang"
-  grep -qF "format('{0}@review?', fromJson('\"\n\"'))" "$f" || miss="$miss question"
-  grep -qF "format('{0}@review;', fromJson('\"\n\"'))" "$f" || miss="$miss semicolon"
-  grep -qF "format('{0}@review{1}', fromJson('\"\n\"'), fromJson('\"\t\"'))" "$f" || miss="$miss tab"
-  if [ -z "$miss" ]; then
-    ok "$n: all ten @review delimiters present (LF, CR, space, tab, comma, colon, period, bang, question, semicolon)"
+  # 2. The precise matcher must NOT be here. The newline-wrapping idiom is its signature; if it
+  #    reappears, someone has moved central logic back into fifteen copies.
+  if grep -qF "format('{0}{1}{0}'" "$f"; then
+    bad "$n: the line-anchoring matcher is back in the caller - it belongs in review.yml"
   else
-    bad "$n: missing @review delimiter(s):$miss - those invocations would not trigger"
+    ok "$n: precise matcher is not duplicated in the caller"
   fi
 
-  # 2b. The start-only form must not come back - it is exactly what fired on "@reviewer".
-  if grep -qF "startsWith(github.event.comment.body, '@review')" "$f"; then
-    bad "$n: start-only startsWith form is back - '@reviewer' would fire a paid round"
+  # 3. Bot-authored comments must not reach a paid round. The pull_request path has always
+  #    skipped bots; the comment path did not, and anchoring the command made a bot quoting a
+  #    previous review MORE likely to reproduce a matching one, not less.
+  if grep -qF "github.event.comment.user.type != 'Bot'" "$f"; then
+    ok "$n: bot-authored comments are excluded"
   else
-    ok "$n: no start-only trigger form"
+    bad "$n: no bot guard on the comment path - a collaborator bot can spend a round"
   fi
 
-  # 3. The naked form must not reappear alongside them. -E + \s* so a spacing variant (no space
-  #    after the comma) can't slip past an exact-string match.
-  if grep -qE "contains\(github\.event\.comment\.body,\s*'@review'\)" "$f"; then
-    bad "$n: still contains the unanchored contains(body, '@review') form"
+  # 3b. The association gate stays on the comment path, so a stranger cannot force a paid round.
+  if grep -qF 'contains(fromJson(' "$f" && grep -qF 'author_association' "$f"; then
+    ok "$n: author_association gate present"
   else
-    ok "$n: no unanchored trigger form"
+    bad "$n: author_association gate missing - strangers could trigger paid rounds"
   fi
 
   # 4. The caller is the single least-privilege control point: review.yml declares NO permissions

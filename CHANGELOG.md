@@ -5,6 +5,44 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.7.0 (pending)
+
+### Changed
+- **The `@review` matcher moves out of the caller and into `review.yml`, so it ships via `@v1`.**
+  This is the important change, and it is a correction of a design mistake rather than a feature.
+
+  Scrutineer replaced a Gemini agent and was meant to be seamless: install one file, forget it,
+  reviews get quietly better. Putting the command matcher in the caller broke that promise —
+  every refinement to it needed a pull request in all fifteen consumer repos. Adding three
+  delimiters cost **15 PRs, ~45 paid review rounds and 40 replies**, for a change that is one tag
+  under the correct design.
+
+  The caller now carries only a cheap prefilter, `contains(body, '@review')`, which fires on any
+  comment containing the command anywhere. The precise rule — line-anchored, whole-word, with its
+  delimiter set and documented limitations — is `is_review_command()` in `review.yml`.
+
+  **The caller should never need changing again.** Only four things genuinely cannot be
+  centralised: the `on:` triggers (GitHub requires the file in-repo), `permissions:` (a called
+  workflow cannot grant itself any), `secrets:` (must be passed explicitly), and the `uses:` pin.
+  None has changed in the product's life. A guard in `caller_test.sh` now fails if the matcher
+  creeps back.
+
+  **The cost, stated plainly:** a comment merely discussing `@review` now starts a runner, which
+  exits within seconds without calling any model. Runner seconds instead of zero — but no API
+  spend, and no consumer ever has to touch the file again. Four reviewers proposed moving the gate
+  out of `if:`; I declined on the grounds that it would spin a runner on *every* comment. That was
+  true only of the version where the caller has no gate at all. They were right and I had argued
+  against a weaker proposal than the one they made.
+
+  Also simpler: `grep` matches line by line, so `^` gives the line anchoring the caller had to
+  fake by wrapping the body in newlines. Ten `contains(format(...))` clauses become one regex.
+
+### Fixed
+- **`already_reviewed()` can no longer drift from the command rule undetected.** The two have
+  diverged twice — once silently skipping a requested round, once silently spending one.
+  `trigger_test.sh` now asserts they carry the same delimiter set, so the next divergence fails CI
+  rather than reaching an invoice.
+
 ## v1.6.2 (pending)
 
 ### Fixed

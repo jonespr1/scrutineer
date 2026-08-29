@@ -193,6 +193,9 @@ By default (see the caller workflow):
 Matching is a case-insensitive substring of the model id; an unrecognised keyword safely falls
 back to running all reviewers.
 
+The command rule lives in the reusable workflow, not in your caller — so it improves when you
+pin `@v1`, with no change to your repo. Your caller only prefilters on the word `@review`.
+
 `@review` must be a **whole word at the start of a line** — flush left, with nothing but a space,
 a tab, a line end, or `,` `:` `.` `!` `?` `;` after it. That is what keeps a comment merely
 *discussing* `@review` from spending a paid round, and stops `@reviewer`, `@reviews` or
