@@ -145,6 +145,47 @@ jobs:
 
           if [ -z "${PR_NUMBER:-}" ]; then echo "No PR number; nothing to review."; exit 0; fi
 
+          # The caller's if: is deliberately only a cheap PREFILTER - it fires on any comment that
+          # merely CONTAINS "@review" anywhere. The precise rule lives HERE, so changing it is a
+          # tag rather than a pull request in every consumer repo.
+          #
+          # That placement is the whole point. The matcher used to live in the caller, and moving
+          # one delimiter cost fifteen pull requests and forty-five paid review rounds. Anything
+          # that can live in this file must live in this file; see CLAUDE.md.
+          #
+          # grep works line by line, so ^ gives the line anchoring the caller previously had to
+          # fake by wrapping the body in newlines. The command must START a line and be followed
+          # by one of an explicit ALLOW-LIST: whitespace (CR included - the web UI submits CRLF),
+          # end of line, or , : . ! ? ; -- so "@review", "@review glm", "@review, please look"
+          # and "@review!" all fire.
+          #
+          # The rule is the allow-list, not a handle-continuation test. What makes the allow-list
+          # SAFE is that a GitHub @-handle continues with a letter, digit or hyphen, and none of
+          # those is on it - so "@reviewer", "@reviews", "@review2" and "@review-bot" match
+          # nothing. Worth stating precisely: a reader who thinks the rule is "reject handle
+          # characters" would expect adding "-" to be harmless, and it would silently
+          # reintroduce "@review-bot".
+          #
+          # KNOWN and not fixable by matching: a line STARTING with "@review " fires even when it
+          # is prose about the command, and "@review" flush-left inside a fenced code block fires.
+          # Telling those from an invocation needs meaning, not matching. An INDENTED "@review"
+          # does not fire.
+          #
+          # already_reviewed() below must use the same rule to decide what counts as a bare
+          # command rather than developer activity. They have drifted twice, in opposite
+          # directions - once silently skipping a requested round, once silently spending one.
+          is_review_command() {
+            printf '%s' "${1:-}" | grep -qiE '^@review([[:space:],:.!?;]|$)'
+          }
+
+          # On issue_comment the caller has only prefiltered, so apply the real rule before
+          # spending anything. Exit 0, not 1: a comment that merely mentions the command is not a
+          # failure, and a red check would be wrong.
+          if [ "${GITHUB_EVENT_NAME:-}" = "issue_comment" ] && ! is_review_command "${COMMENT_BODY:-}"; then
+            echo "No @review command at the start of a line - nothing to do."
+            exit 0
+          fi
+
           # Resolve the PR head commit (pull_request provides it; issue_comment must fetch it).
           if [ -z "${HEAD_SHA:-}" ]; then
             HEAD_SHA="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '.head.sha' 2>/dev/null || true)"
@@ -504,6 +545,23 @@ jobs:
             case "$pt_in" in ''|*[!0-9]*) pt_in=0 ;; esac
             local sz=""
             [ "$pt_in" -gt 0 ] && sz=" This prompt was ${pt_in} tokens (the payload ceiling is the 200,000-char diff cap plus CONTEXT_BUDGET)."
+            # A small prompt cannot be the thing that ran out of room. Below this, the model
+            # over-generated for the diff it was given - so "trim the payload" sends the reader
+            # somewhere with nothing to trim, which is the wrong-remedy failure this function
+            # exists to avoid. 20000 is far under the structural ceiling (the 200,000-char diff
+            # cap plus CONTEXT_BUDGET, ~200k tokens) and above any diff worth trimming.
+            # Seen on brand-assure-screen-api#108: 7,698 tokens in, 32,000 out, on ONE workflow file.
+            #
+            # But ONLY when the cap is not itself the obvious lever. A repo that sets
+            # OPENROUTER_MAXTOKENS=4000 and then hits it on a small PR has a deterministic
+            # failure, not a variable one: "re-run" re-spends against the same cap, and the
+            # advice would never mention the cap the operator explicitly chose. In that case
+            # fall through to the tps/window logic, which names it.
+            if [ "$pt_in" -gt 0 ] && [ "$pt_in" -lt 20000 ] \
+               && { [ -z "${MT:-}" ] || [ "$MT" -ge 20000 ]; }; then
+              printf 'The payload is NOT the problem here: this prompt was only %s tokens, against a ceiling of roughly 200,000. The model over-generated for the size of the diff rather than running out of room for it. Re-run the review - output length varies a lot between hosts and between runs on the same host - or pin this slot to a different model. Trimming the diff will not help.' "$pt_in"
+              return
+            fi
             # No cap set, so the model stopped on its own limit; only the payload is ours to change.
             if [ -z "${MT:-}" ]; then
               printf 'No OPENROUTER_MAXTOKENS is set, so the model stopped on its own output limit - reduce the payload (DIFF_EXCLUDE, a lower CONTEXT_BUDGET, or a smaller PR).%s' "$sz"
@@ -676,11 +734,22 @@ jobs:
           # new developer activity since? If so, skip it. A bare repeat "@review" on an unchanged commit
           # is a no-op; a new commit (SHA changes) or a substantive reply (not just "@review") re-triggers.
           #
-          # The "is this just a trigger?" test matches @review as a WHOLE WORD, the same rule the
-          # caller's trigger uses. startswith("@review") also swallowed "@reviewer..." - so a
-          # substantive reply opening with that word counted as no activity, and the @review that
-          # followed it was skipped as "already reviewed". The reviewer never saw the reply and the
-          # requested round silently did not happen.
+          # The "is this just a trigger?" test matches @review as a WHOLE WORD, with the SAME
+          # delimiter set is_review_command() uses. These two have drifted TWICE, in opposite
+          # directions, and each direction fails silently in its own way:
+          #
+          #   1. This test too LOOSE (v1.6.1). It used startswith("@review"), which also swallowed
+          #      "@reviewer...", so a substantive reply opening with that word counted as no
+          #      activity. The @review that followed was skipped as "already reviewed": the
+          #      reviewer never saw the reply, and the round the developer asked for did not run.
+          #
+          #   2. This test too TIGHT (briefly, before v1.7.0). The trigger gained ! ? ; and this
+          #      did not, so "@review!" was a command to one and "developer activity" to the
+          #      other. It bypassed the skip and spent a full round on an unchanged commit.
+          #
+          # One silently withholds a round that was asked for; the other silently buys one that
+          # was not. tests/trigger_test.sh asserts the two sets are identical, so a third drift
+          # fails CI rather than arriving as a surprise on the bill.
           already_reviewed() {
             local label="$1"
             [ -z "${HEAD_SHA:-}" ] && return 1
@@ -710,7 +779,7 @@ jobs:
               | if $a==null then false
                 else ([ .[] | select(.user.type=="User"
                           and (.created_at > $a.created_at)
-                          and ((body|ascii_downcase|gsub("^\\s+";"")|test("^@review([[:space:],:.]|$)"))|not)) ] | length) == 0
+                          and ((body|ascii_downcase|gsub("^\\s+";"")|test("^@review([[:space:],:.!?;]|$)"))|not)) ] | length) == 0
                 end' >/dev/null 2>&1
           }
 

@@ -5,6 +5,106 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.7.0 (pending)
+
+### Changed
+- **The `@review` matcher moves out of the caller and into `review.yml`, so it ships via `@v1`.**
+  This is the important change, and it is a correction of a design mistake rather than a feature.
+
+  Scrutineer replaced a Gemini agent and was meant to be seamless: install one file, forget it,
+  reviews get quietly better. Putting the command matcher in the caller broke that promise —
+  every refinement to it needed a pull request in all fifteen consumer repos. Adding three
+  delimiters cost **15 PRs, ~45 paid review rounds and 40 replies**, for a change that is one tag
+  under the correct design.
+
+  The caller now carries only a cheap prefilter, `contains(body, '@review')`, which fires on any
+  comment containing the command anywhere. The precise rule — line-anchored, whole-word, with its
+  delimiter set and documented limitations — is `is_review_command()` in `review.yml`.
+
+  **The caller should never need changing again.** Only four things genuinely cannot be
+  centralised: the `on:` triggers (GitHub requires the file in-repo), `permissions:` (a called
+  workflow cannot grant itself any), `secrets:` (must be passed explicitly), and the `uses:` pin.
+  None has changed in the product's life. A guard in `caller_test.sh` now fails if the matcher
+  creeps back.
+
+  **The cost, stated plainly:** a comment merely discussing `@review` now starts a runner, which
+  exits within seconds without calling any model. Runner seconds instead of zero — but no API
+  spend, and no consumer ever has to touch the file again. Four reviewers proposed moving the gate
+  out of `if:`; I declined on the grounds that it would spin a runner on *every* comment. That was
+  true only of the version where the caller has no gate at all. They were right and I had argued
+  against a weaker proposal than the one they made.
+
+  Also simpler: `grep` matches line by line, so `^` gives the line anchoring the caller had to
+  fake by wrapping the body in newlines. Ten `contains(format(...))` clauses become one regex.
+
+### Fixed
+- **`already_reviewed()` can no longer drift from the command rule undetected.** The two have
+  diverged twice — once silently skipping a requested round, once silently spending one.
+  `trigger_test.sh` now asserts they carry the same delimiter set, so the next divergence fails CI
+  rather than reaching an invoice.
+
+## v1.6.2 (pending)
+
+### Fixed
+- **`@review!`, `@review?` and `@review;` now fire.** v1.6.1 justified the `,` `:` `.` delimiters by
+  "natural phrasing" and then omitted three of the most natural endings, so those comments were a
+  **silent no-op** — no run, no feedback. Raised independently on seven of the fifteen rollout PRs
+  by `minimax/minimax-m3` and `z-ai/glm-5.3-flash`; the asymmetry was theirs to spot and it was real.
+
+- **Truncation advice no longer tells you to trim a payload that is already tiny.** `cap_advice()`
+  chose between "raise the cap" and "reduce the payload" purely from throughput against the
+  timeout, never asking whether the payload was actually large. On `brand-assure-screen-api#108` it
+  advised trimming a **7,698-token** prompt — against a ceiling of roughly 200,000 — because the
+  model had emitted 32,000 tokens reviewing a single workflow file. There was nothing to trim; the
+  model over-generated. Below 20,000 input tokens the advice now says so and recommends a re-run or
+  a different slot, since output length varies widely between hosts and between runs on one host.
+
+  This is the same wrong-remedy failure `cap_advice()` was written to prevent, arriving from the
+  input side rather than the output side. Scrutineer found it in its own error message while
+  reviewing its own rollout.
+
+- **Bot-authored comments can no longer trigger a paid round.** The `pull_request` path already
+  skipped bot authors; the `issue_comment` path did not, so a bot holding COLLABORATOR could spend
+  credits — including by quoting a previous review that contained the command, which the anchoring
+  made *more* likely, not less. `github.event.comment.user.type != 'Bot'` now guards it. This was
+  already carried as a local customisation in `orange_france`; the template has adopted it.
+
+- **The space delimiter is no longer an invisible trailing space.** It was written as
+  `format('{0}@review ', ...)` — a space inside a quoted string, invisible in diffs, blame and
+  review. `z-ai/glm-5.3-flash` pointed out on `Sell-Faster-on-eBay#103` that a reformatter or a
+  careless edit dropping it degrades the needle to `\n@review`, which is a prefix of
+  `\n@reviewer` — silently reintroducing the exact bug this work exists to fix. It is now
+  `fromJson('" "')`, consistent with the CR and tab clauses and visible to a reader.
+
+- **The de-dupe's activity rule now carries the same delimiter set as the trigger.** Adding `!` `?`
+  `;` to the trigger without adding them here made the two layers disagree: `@review!` was a valid
+  command to the trigger but *developer activity* to `already_reviewed()`, so it bypassed the skip
+  and spent a full paid round on an already-reviewed, unchanged commit — where a plain `@review`
+  correctly exits green. Caught by `minimax/minimax-m3` on the PR that introduced it, before merge.
+
+  This is the second time these two layers have drifted in opposite directions. The comment in
+  `review.yml` now says explicitly that they must move together, and `dedupe_test.sh` pins all six
+  punctuation forms (`,` `:` `.` `!` `?` `;`).
+
+### Documented
+- **The `author_association` comment was wrong.** It claimed the check "stops strangers from
+  triggering reviews (and spending your API credits / runner minutes) on public repos". It gates
+  the **comment path only** — the PR-open path fires for any non-bot author. Raised on six of the
+  fifteen rollout PRs by `z-ai/glm-5.3-flash`. The behaviour is deliberate (auto-review is the
+  point); the claim was not true, and is now stated accurately along with the fork consequence.
+
+- **Four limitations**, now stated in the README and the caller comment. Three follow from the
+  matcher having no regex, and all three are pinned by `tests/trigger_test.sh` so they stay
+  deliberate: `@review` flush-left inside a fenced code block **does** fire (found by
+  `z-ai/glm-5.3-flash`), a line **starting** with `@review ` fires even as prose about the command,
+  and indented `@review` does **not** fire. The fourth — opening a draft PR fires a review — is a
+  trigger-design choice rather than a matching limit, and cannot be pinned by that test.
+
+- **Corrected the case-insensitivity note.** It claimed "contains/format are case-insensitive".
+  Only `contains()` is a comparison; `format()` is a string builder. Two reviewers disagreed about
+  this — one asserting `contains()` is case-*sensitive*. It is not, per GitHub's documentation, so
+  the behaviour is unchanged and only the wording was wrong.
+
 ## v1.6.1 (pending)
 
 ### Fixed

@@ -193,10 +193,40 @@ By default (see the caller workflow):
 Matching is a case-insensitive substring of the model id; an unrecognised keyword safely falls
 back to running all reviewers.
 
+The command rule lives in the reusable workflow, not in your caller — so it improves when you
+pin `@v1`, with no change to your repo. Your caller only prefilters on the word `@review`.
+
 `@review` must be a **whole word at the start of a line** — flush left, with nothing but a space,
-a tab, a line end, or `,` `:` `.` after it. That is what keeps a comment merely *discussing* `@review`
-from spending a paid round, and stops `@reviewer` or `@reviews` firing one. A leading space, or
-any other character straight after the command (`@review!`, `@review-now`), is inert.
+a tab, a line end, or `,` `:` `.` `!` `?` `;` after it. That is what keeps a comment merely
+*discussing* `@review` from spending a paid round, and stops `@reviewer`, `@reviews` or
+`@review-bot` firing one.
+
+Three limitations follow from GitHub expressions having no regex, and are worth knowing:
+
+- **A fenced code block still fires.** Showing someone the command, flush left inside ```` ``` ````,
+  spends a round — the fence lines are just newlines as far as the match is concerned.
+- **Prose that *starts* a line still fires.** `@review is the only command we support` spends a
+  round. Only a mention later in a line (`the command is @review`) is inert — telling prose from an
+  invocation needs meaning, not matching.
+- **Indented `@review` does not fire.** Inside a list item, a blockquote, or behind any leading
+  whitespace, it is inert. Put it flush left.
+A fourth is a trigger-design choice rather than a matching limit:
+
+- **Opening a draft PR fires a review**, because the trigger is on `opened`. Swap `opened` for
+  `ready_for_review` in your caller if drafts should not be reviewed.
+
+Bot-authored comments never trigger a round, so a bot with collaborator access cannot spend your
+credits by quoting the command back at you.
+
+**Two ways to type `@review` and get nothing**, both silent, both deliberate:
+
+- **Editing an existing comment to add it.** Only newly *created* comments are subscribed, because
+  edits are a cheap way to fire rounds by accident.
+- **Leaving it as an inline review comment** on the Files tab. That is a different event; wiring it
+  would mean a paid round per line comment.
+
+In both cases post a new conversation comment instead. Found by `z-ai/glm-5.3-flash` reviewing this
+project's own rollout.
 
 **Who can trigger it:** for security, `@review` comment triggers only run for **repo owners,
 members, and collaborators** (the caller checks `author_association`). This stops strangers from

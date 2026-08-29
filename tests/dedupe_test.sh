@@ -104,6 +104,14 @@ check '@review, ... is a trigger, not activity'         yes 'gemini-flash-latest
       "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review, please look again"')"
 check '@review: ... is a trigger, not activity'         yes 'gemini-flash-latest' \
       "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review: please look again"')"
+check '@review. is a trigger, not activity'             yes 'gemini-flash-latest' \
+      "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review."')"
+check '@review! is a trigger, not activity'             yes 'gemini-flash-latest' \
+      "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review!"')"
+check '@review? is a trigger, not activity'             yes 'gemini-flash-latest' \
+      "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review?"')"
+check '@review; is a trigger, not activity'             yes 'gemini-flash-latest' \
+      "$(printf '%s' "$AFTER" | jq --arg b "$GENUINE" '.[0].body=$b | .[1].body="@review; focus on auth"')"
 # A reply that merely STARTS with the word "@reviewer" is substantive developer activity, not a
 # trigger. startswith("@review") swallowed it, so the round the developer then asked for was
 # skipped as "already reviewed" and their counter-argument never reached the model.

@@ -15,42 +15,39 @@ on:
 
 jobs:
   review:
-    # Run on PR open/reopen - but skip bot-authored PRs (e.g. Dependabot); a full AI review of a
-    # routine dependency bump rarely earns its cost, and you can still review one on demand with
-    # "@review".
+    # Run on PR open/reopen - but skip bot-authored PRs (e.g. Dependabot); a full AI review of
+    # a routine dependency bump rarely earns its cost, and you can still review one on demand
+    # with "@review".
     #
-    # Also runs when a trusted user comments "@review" -- but only as a WHOLE WORD ON ITS OWN
-    # LINE, never merely somewhere in the body. A bare contains() fires a paid review round on
-    # any comment that just discusses "@review" in prose (it happened: a comment saying it was
-    # NOT triggering a round triggered one). Matching line-start rather than body-start keeps
-    # the normal habit of signing off a long reply with "@review" on its own line working,
-    # while an inline mention stays inert.
+    # THIS FILE SHOULD NEVER NEED CHANGING AGAIN. That is deliberate, and it was learned the hard
+    # way: the precise "@review" matcher used to live in this expression, and moving one delimiter
+    # meant a pull request in every consumer repo. The condition below is now only a cheap
+    # PREFILTER - it fires on any comment containing "@review" anywhere, which is intentionally
+    # generous. The real rule (line-anchored, whole-word, with its delimiter set and its
+    # documented limitations) lives in review.yml and reaches you through the @v1 tag, so
+    # tightening it is a release rather than fifteen pull requests.
     #
-    # BOTH ends are anchored. Anchoring only the start still fired on "@reviewer" / "@reviews",
-    # so a member mentioning such a handle spent a paid round. GitHub expressions have no regex,
-    # so rather than test the character after the command directly, wrap the body in newlines --
-    # format('{0}{1}{0}', "\n", body) -- which turns "starts a line" into a plain contains() and
-    # makes the LAST line testable too (it has no trailing newline of its own), then require what
-    # follows to be a space, tab, CR (the web UI submits CRLF), LF, or one of , : . so that
-    # natural phrasing ("@review, please look") and a tab-separated argument both still fire.
-    # "@reviewer" matches none of them - an @-handle continues with a letter, digit or hyphen.
-    # (GitHub's contains/format are case-insensitive, so "@Review" is accepted; a LEADING SPACE
-    # before @review is not - put it flush left.)
+    # The cost of the prefilter being generous: a comment merely DISCUSSING "@review" starts a
+    # runner, which then exits in a few seconds without calling any model. Runner seconds, not
+    # API credits. That is the trade for never having to touch this file.
     #
-    # The author_association check
-    # stops strangers from triggering reviews (and spending your API credits / runner minutes) on
-    # public repos. To review bot PRs automatically too, drop the `user.type != 'Bot'` clause.
+    # The four things below genuinely cannot be centralised: GitHub requires the workflow file in
+    # your repo, a called workflow cannot grant itself permissions, secrets must be passed
+    # explicitly, and the pin is the reference.
+    #
+    # The author_association check gates the COMMENT path ONLY. It stops strangers commenting
+    # "@review" to spend your API credits on a public repo. It does NOT gate the PR-open path: on
+    # a public repo, any non-bot author opening a PR fires a round. That is deliberate
+    # (auto-review is the point), but know the consequence - and note GitHub withholds secrets
+    # from a fork's pull_request run, so a fork PR gets the "no API key configured" notice and
+    # exits 0 rather than a review. Add an author_association check to the first branch too if
+    # you want the PR-open path gated. To review bot PRs automatically, drop `user.type != 'Bot'`.
     if: >-
       (github.event_name == 'pull_request' &&
        github.event.pull_request.user.type != 'Bot') ||
       (github.event.issue.pull_request != null &&
-       (contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{0}', fromJson('"\n"'))) ||
-        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{1}', fromJson('"\n"'), fromJson('"\r"'))) ||
-        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review ', fromJson('"\n"'))) ||
-        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review,', fromJson('"\n"'))) ||
-        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review:', fromJson('"\n"'))) ||
-        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review.', fromJson('"\n"'))) ||
-        contains(format('{0}{1}{0}', fromJson('"\n"'), github.event.comment.body), format('{0}@review{1}', fromJson('"\n"'), fromJson('"\t"')))) &&
+       github.event.comment.user.type != 'Bot' &&
+       contains(github.event.comment.body, '@review') &&
        contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association))
     # The reusable workflow inherits exactly these grants. 'checks: read' powers CI-aware
     # severity calibration; it is optional (reviews run fine without it).
