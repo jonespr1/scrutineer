@@ -155,10 +155,16 @@ jobs:
           #
           # grep works line by line, so ^ gives the line anchoring the caller previously had to
           # fake by wrapping the body in newlines. The command must START a line and be followed
-          # by whitespace (CR included - the web UI submits CRLF), end of line, or punctuation
-          # that cannot continue an @-handle. So "@reviewer", "@reviews", "@review2" and
-          # "@review-bot" stay inert, while "@review", "@review glm", "@review, please look" and
-          # "@review!" all fire.
+          # by one of an explicit ALLOW-LIST: whitespace (CR included - the web UI submits CRLF),
+          # end of line, or , : . ! ? ; -- so "@review", "@review glm", "@review, please look"
+          # and "@review!" all fire.
+          #
+          # The rule is the allow-list, not a handle-continuation test. What makes the allow-list
+          # SAFE is that a GitHub @-handle continues with a letter, digit or hyphen, and none of
+          # those is on it - so "@reviewer", "@reviews", "@review2" and "@review-bot" match
+          # nothing. Worth stating precisely: a reader who thinks the rule is "reject handle
+          # characters" would expect adding "-" to be harmless, and it would silently
+          # reintroduce "@review-bot".
           #
           # KNOWN and not fixable by matching: a line STARTING with "@review " fires even when it
           # is prose about the command, and "@review" flush-left inside a fenced code block fires.
