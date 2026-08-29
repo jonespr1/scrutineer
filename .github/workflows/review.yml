@@ -735,13 +735,21 @@ jobs:
           # is a no-op; a new commit (SHA changes) or a substantive reply (not just "@review") re-triggers.
           #
           # The "is this just a trigger?" test matches @review as a WHOLE WORD, with the SAME
-          # delimiter set the caller's trigger uses. The two must not drift: a delimiter the
-          # trigger accepts but this does not turns a bare repeat command into "developer
-          # activity", so it bypasses the skip below and spends a full round on an unchanged
-          # commit. That is exactly what "@review!" did between v1.6.1 and v1.6.2. startswith("@review") also swallowed "@reviewer..." - so a
-          # substantive reply opening with that word counted as no activity, and the @review that
-          # followed it was skipped as "already reviewed". The reviewer never saw the reply and the
-          # requested round silently did not happen.
+          # delimiter set is_review_command() uses. These two have drifted TWICE, in opposite
+          # directions, and each direction fails silently in its own way:
+          #
+          #   1. This test too LOOSE (v1.6.1). It used startswith("@review"), which also swallowed
+          #      "@reviewer...", so a substantive reply opening with that word counted as no
+          #      activity. The @review that followed was skipped as "already reviewed": the
+          #      reviewer never saw the reply, and the round the developer asked for did not run.
+          #
+          #   2. This test too TIGHT (briefly, before v1.7.0). The trigger gained ! ? ; and this
+          #      did not, so "@review!" was a command to one and "developer activity" to the
+          #      other. It bypassed the skip and spent a full round on an unchanged commit.
+          #
+          # One silently withholds a round that was asked for; the other silently buys one that
+          # was not. tests/trigger_test.sh asserts the two sets are identical, so a third drift
+          # fails CI rather than arriving as a surprise on the bill.
           already_reviewed() {
             local label="$1"
             [ -z "${HEAD_SHA:-}" ] && return 1
