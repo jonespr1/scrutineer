@@ -218,6 +218,16 @@ A fourth is a trigger-design choice rather than a matching limit:
 Bot-authored comments never trigger a round, so a bot with collaborator access cannot spend your
 credits by quoting the command back at you.
 
+**Two ways to type `@review` and get nothing**, both silent, both deliberate:
+
+- **Editing an existing comment to add it.** Only newly *created* comments are subscribed, because
+  edits are a cheap way to fire rounds by accident.
+- **Leaving it as an inline review comment** on the Files tab. That is a different event; wiring it
+  would mean a paid round per line comment.
+
+In both cases post a new conversation comment instead. Found by `z-ai/glm-5.3-flash` reviewing this
+project's own rollout.
+
 **Who can trigger it:** for security, `@review` comment triggers only run for **repo owners,
 members, and collaborators** (the caller checks `author_association`). This stops strangers from
 triggering reviews - and spending your API credits or runner minutes - on public repos. The
