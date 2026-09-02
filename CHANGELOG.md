@@ -5,6 +5,87 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.7.1 (pending)
+
+### Fixed
+- **A comment-triggered re-review could resolve the wrong commit.** On `marketing-os#51`, an
+  `@review` comment posted right after a push got back the PR's *first* commit from
+  `gh api pulls/{n} --jq '.head.sha'`, while the real head — cross-checked independently against
+  `git/ref/heads/<branch>` — was already several commits ahead. All three reviewer slots share one
+  `HEAD_SHA` variable, so the single bad read fanned into all three reviews citing the identical
+  wrong commit and re-raising already-fixed findings as still open: a full paid round spent
+  reviewing stale code.
+
+  Unlike the diff fetch a few lines below it, which retries on *failure*, this read had no such
+  guard — and a stale response is a `200 OK`, indistinguishable from a good one, so retry-on-
+  failure alone would not have caught it. `resolve_head_sha()` now requires two consecutive reads
+  to agree before trusting the result. Covered by `tests/head_sha_test.sh`, which extracts the
+  function verbatim and drives a fake `gh` through the exact stale-then-correct sequence observed,
+  plus the always-stable and never-stabilises cases. Mutation-tested: a version that retries but
+  trusts the first non-empty read (looks like a fix, isn't) fails the test on the same case that
+  cost the round.
+
+  Review of this fix (`#31`) surfaced three more gaps in the same area, all closed here:
+
+  - **An unresolved `HEAD_SHA` degraded silently instead of failing.** If all four reads came back
+    empty, the review still ran and posted with a marker reading `sha=none` — a literal string no
+    real commit SHA can ever match, so that review could never be recognised as "already reviewed"
+    again, for any future commit, ever. Worse than the diff fetch's own failure mode (a red check,
+    nothing spent). Now fails the same way the diff fetch does: loud, before any model is called.
+  - **The diff fetch could still disagree with the just-resolved `HEAD_SHA`.** It's a separate,
+    later call to the same live endpoint, so a push landing in the gap between resolving the SHA
+    and fetching the diff would review newer content under an older marker — the same failure
+    class this whole fix exists to close, just moved one step down. One extra read after the diff
+    fetch now checks for that, and re-resolves and re-fetches once if the head moved.
+  - **`tests/head_sha_test.sh` wasn't wired into CI.** `ci.yml` lists each test file explicitly
+    rather than globbing `tests/*.sh`, and the new file was missing from that list — so the
+    "Unit tests" check that passed on `#31` had never actually run it. Added.
+
+  Three additional test-harness fixes, all mutation-verified: the sequence-encoding helper used
+  `:-` instead of `-` for a fallback lookup, which silently replaced a deliberately-empty sequence
+  element (simulating a dropped read) with the last element — masking the exact case a mid-sequence
+  failure needs to exercise; the sleep-count assertion had no default, so a broken marker capture
+  produced a shell error but still reported the test as passing; and the nested test harness didn't
+  run under `set -euo pipefail` the way production does.
+
+  Declined, with reasoning: cross-checking the resolved SHA against `git/ref/heads/<branch>` as a
+  second, independent source. It would require resolving `.head.repo.full_name` for fork PRs and
+  querying a repository our token has no guaranteed read access to — trading a rare residual race
+  for a new failure mode on every fork PR. Two agreeing reads 2 seconds apart already converts
+  "always wrong on this failure" into "wrong only if the lag exceeds the polling window," which is
+  the trade worth making without that risk.
+
+  A second review round on the fix above (glm) found the `fetch_diff()` re-check itself had
+  introduced a `set -e` bug: `DIFF="$(fetch_diff)"; drc=$?` looks correct, but a failing command
+  substitution inside a plain assignment is what `set -e` treats as the failing command — the
+  script aborted on that exact line, so `drc=$?` and the `::error::` diagnostic it gates never
+  ran. Confirmed by reproduction before fixing: the pre-fix form silently swallowed the
+  diagnostic and exited 1 anyway, which is why nothing red-flagged it in CI. Both call sites now
+  use `drc=0; DIFF="$(fetch_diff)" || drc=$?` — the exemption `set -e` grants to `||` is what
+  the original `if DIFF="$(...)"; then ... else ... fi` form relied on before this file had a
+  named `fetch_diff()` to call twice. `tests/fetch_diff_test.sh` pins both the extracted
+  function and the literal call-site pattern in `review.yml` itself (a correct function behind
+  an unsafe call site is still the bug), plus a behavioural run under `set -euo pipefail` proving
+  the diagnostic is reachable. Mutation-tested: reverting either call site to the unsafe form
+  fails two of the three checks.
+
+  Also from that round: the concurrency comment claiming "every trigger ends as a success" was
+  already false before this PR (the diff fetch has always had a real `exit 1`) and more so after
+  it (a second exit-1 path, for an unresolved `HEAD_SHA`). Corrected.
+
+  A third round (glm again) found one Low, purely in the test harness: `tests/head_sha_test.sh`
+  captured a test's `sleep`-count via a fixed shared path, `/tmp/head_sha_test_stderr`, truncated
+  and read once per `check()` call. Two concurrent invocations of the script — a developer running
+  it in two shells, or a future CI matrix splitting test files across jobs — could truncate
+  between another run's marker write and its own grep, or read another run's count into the wrong
+  assertion. Flagged as Low since this repo's own CI runs tests serially, so it couldn't fire
+  today. Fixed anyway: both temp files (`idxfile` and the new one) are now created per-`check()`
+  call rather than a fixed path, mirroring the pattern `idxfile` already used. Proven, not just
+  argued: 8 copies of the test run in parallel, 5 rounds — the fixed-path version raced on **every
+  single round** (worse than "Low" suggested; the file's own repeated truncation makes this a
+  near-certainty under real concurrency, not a rare edge case), the per-call version passed
+  cleanly on all 40 runs.
+
 ## v1.7.0 (pending)
 
 ### Changed
