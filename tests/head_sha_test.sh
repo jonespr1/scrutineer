@@ -40,9 +40,16 @@ fail() { printf 'FAIL  %s\n' "$1"; fails=1; }
 # single space-joined string) and shell-quoted with `%q`, so an intentionally EMPTY element
 # (simulating a failed/empty read) survives - a space-joined string would silently drop it via
 # word-splitting.
-run_with_sequence() { # sequence elements as separate args; "" is a legitimate empty read
-  local idxfile seqlit
-  idxfile="$(mktemp)"; echo 0 > "$idxfile"
+# idxfile/errfile are created by the CALLER (check(), below) and passed in by path, not
+# created here: this function is invoked as `got="$(run_with_sequence ...)"`, a command
+# substitution that forks a subshell, and a plain variable assigned inside it (as LAST_STDERR_FILE
+# once was here) cannot escape back to check() - the same trap the IDXFILE/gh() comment above
+# already works around for a different variable. Creating both files in check()'s own shell
+# sidesteps the problem entirely instead of reintroducing it one level up.
+run_with_sequence() { # idxfile errfile seq_elem...; "" is a legitimate empty read
+  local idxfile="$1" errfile="$2"; shift 2
+  echo 0 > "$idxfile"
+  local seqlit
   seqlit="$(printf '%q ' "$@")"
   REPO="jonespr1/example" PR_NUMBER="99" IDXFILE="$idxfile" \
   bash -c '
@@ -68,19 +75,24 @@ run_with_sequence() { # sequence elements as separate args; "" is a legitimate e
     sleep() { SLEEP_CALLS=$((SLEEP_CALLS+1)); }
     resolve_head_sha
     echo "|sleeps=$SLEEP_CALLS" >&2
-  ' 2>/tmp/head_sha_test_stderr
-  rm -f "$idxfile"
+  ' 2>"$errfile"
 }
 
 check() { # desc want want_min_sleeps seq_elem...
   local desc="$1" want="$2" want_sleeps="$3"; shift 3
-  local got got_sleeps
-  got="$(run_with_sequence "$@")"
+  local got got_sleeps idxfile errfile
+  # Fresh files per check(), not a fixed shared path: two concurrent invocations of this script
+  # (a developer running it in two shells, or a future CI matrix splitting test files across
+  # jobs) would otherwise truncate and read each other's stderr - the same stale-data class the
+  # got_sleeps default fix below closed, resurfacing under concurrency instead of a broken marker.
+  idxfile="$(mktemp)"; errfile="$(mktemp)"
+  got="$(run_with_sequence "$idxfile" "$errfile" "$@")"
   # Default to 0, not empty: an empty got_sleeps (the |sleeps= marker never reaching the file)
   # must fail the comparison below rather than making `[ -lt ]` error out silently and the test
   # print "ok" with the sleep assertion never actually checked.
-  got_sleeps="$(grep -o 'sleeps=[0-9]*' /tmp/head_sha_test_stderr | cut -d= -f2)"
+  got_sleeps="$(grep -o 'sleeps=[0-9]*' "$errfile" | cut -d= -f2)"
   got_sleeps="${got_sleeps:-0}"
+  rm -f "$idxfile" "$errfile"
   if [ "$got" != "$want" ]; then
     fail "$desc (got sha='$got' want='$want')"; return
   fi
@@ -120,8 +132,6 @@ check 'never stabilises: exhausts retries and returns the last read rather than 
 # Every read empty (API fully down) - must not treat two empty reads as agreement.
 check 'repeated empty reads are never treated as a confirmed match' \
       "" 3 "" "" "" ""
-
-rm -f /tmp/head_sha_test_stderr
 
 [ "$fails" -eq 0 ] && echo "All HEAD_SHA resolution tests passed." || echo "Some HEAD_SHA resolution tests FAILED." >&2
 exit "$fails"

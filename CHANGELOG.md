@@ -73,6 +73,19 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   already false before this PR (the diff fetch has always had a real `exit 1`) and more so after
   it (a second exit-1 path, for an unresolved `HEAD_SHA`). Corrected.
 
+  A third round (glm again) found one Low, purely in the test harness: `tests/head_sha_test.sh`
+  captured a test's `sleep`-count via a fixed shared path, `/tmp/head_sha_test_stderr`, truncated
+  and read once per `check()` call. Two concurrent invocations of the script — a developer running
+  it in two shells, or a future CI matrix splitting test files across jobs — could truncate
+  between another run's marker write and its own grep, or read another run's count into the wrong
+  assertion. Flagged as Low since this repo's own CI runs tests serially, so it couldn't fire
+  today. Fixed anyway: both temp files (`idxfile` and the new one) are now created per-`check()`
+  call rather than a fixed path, mirroring the pattern `idxfile` already used. Proven, not just
+  argued: 8 copies of the test run in parallel, 5 rounds — the fixed-path version raced on **every
+  single round** (worse than "Low" suggested; the file's own repeated truncation makes this a
+  near-certainty under real concurrency, not a rare edge case), the per-call version passed
+  cleanly on all 40 runs.
+
 ## v1.7.0 (pending)
 
 ### Changed
