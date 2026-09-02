@@ -55,6 +55,24 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   "always wrong on this failure" into "wrong only if the lag exceeds the polling window," which is
   the trade worth making without that risk.
 
+  A second review round on the fix above (glm) found the `fetch_diff()` re-check itself had
+  introduced a `set -e` bug: `DIFF="$(fetch_diff)"; drc=$?` looks correct, but a failing command
+  substitution inside a plain assignment is what `set -e` treats as the failing command — the
+  script aborted on that exact line, so `drc=$?` and the `::error::` diagnostic it gates never
+  ran. Confirmed by reproduction before fixing: the pre-fix form silently swallowed the
+  diagnostic and exited 1 anyway, which is why nothing red-flagged it in CI. Both call sites now
+  use `drc=0; DIFF="$(fetch_diff)" || drc=$?` — the exemption `set -e` grants to `||` is what
+  the original `if DIFF="$(...)"; then ... else ... fi` form relied on before this file had a
+  named `fetch_diff()` to call twice. `tests/fetch_diff_test.sh` pins both the extracted
+  function and the literal call-site pattern in `review.yml` itself (a correct function behind
+  an unsafe call site is still the bug), plus a behavioural run under `set -euo pipefail` proving
+  the diagnostic is reachable. Mutation-tested: reverting either call site to the unsafe form
+  fails two of the three checks.
+
+  Also from that round: the concurrency comment claiming "every trigger ends as a success" was
+  already false before this PR (the diff fetch has always had a real `exit 1`) and more so after
+  it (a second exit-1 path, for an unresolved `HEAD_SHA`). Corrected.
+
 ## v1.7.0 (pending)
 
 ### Changed

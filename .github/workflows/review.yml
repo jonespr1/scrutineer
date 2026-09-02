@@ -85,8 +85,10 @@ on:
         required: false
 
 # Serialise runs for one PR (so the de-dupe check below can't race) but NEVER cancel one:
-# a cancelled run reads as "it didn't run" in the checks UI. Redundant triggers instead run,
-# find the commit already reviewed, and exit 0 (green). Every trigger ends as a success.
+# a cancelled run reads as "it didn't run" in the checks UI. A redundant trigger runs, finds the
+# commit already reviewed, and exits 0 (green) - that is the common case, not a guarantee: a
+# genuine GitHub API failure (the diff fetch, or resolving HEAD_SHA) still exits 1 red, by design
+# - see "fail loudly" throughout this file.
 concurrency:
   group: 'scrutineer-${{ github.event.pull_request.number || github.event.issue.number }}'
   cancel-in-progress: false
@@ -269,7 +271,12 @@ jobs:
             printf '%s' "$d"
             return "$rc"
           }
-          DIFF="$(fetch_diff)"; drc=$?
+          # "|| drc=$?", not ";", after the assignment: under this run block's set -e, a plain
+          # `DIFF="$(fetch_diff)"; drc=$?` would abort the whole script the instant fetch_diff
+          # returns non-zero - set -e treats a failing command substitution inside an assignment
+          # as the failing command, so `drc=$?` on the next line would never run and the ::error
+          # block below would be unreachable dead code, on the one path it exists to explain.
+          drc=0; DIFF="$(fetch_diff)" || drc=$?
           if [ "$drc" -ne 0 ]; then
             echo "::error::Could not fetch the PR diff after 3 attempts (GitHub API degraded?). Failing rather than silently posting nothing."
             exit 1
@@ -292,7 +299,7 @@ jobs:
               exit 1
             fi
             SHORT_SHA="${HEAD_SHA:0:7}"
-            DIFF="$(fetch_diff)"; drc=$?
+            drc=0; DIFF="$(fetch_diff)" || drc=$?
             if [ "$drc" -ne 0 ]; then
               echo "::error::Could not re-fetch the PR diff after the head moved (GitHub API degraded?)."
               exit 1

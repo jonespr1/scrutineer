@@ -74,6 +74,8 @@ jobs:
         run: bash tests/exclude_test.sh
       - name: 'HEAD_SHA resolution (issue_comment staleness guard)'
         run: bash tests/head_sha_test.sh
+      - name: 'Diff fetch (fetch_diff extraction + set -e-safe call sites)'
+        run: bash tests/fetch_diff_test.sh
 
   lint:
     name: Lint · actionlint · PSScriptAnalyzer
