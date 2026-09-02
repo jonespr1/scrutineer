@@ -5,6 +5,26 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.7.1 (pending)
+
+### Fixed
+- **A comment-triggered re-review could resolve the wrong commit.** On `marketing-os#51`, an
+  `@review` comment posted right after a push got back the PR's *first* commit from
+  `gh api pulls/{n} --jq '.head.sha'`, while the real head — cross-checked independently against
+  `git/ref/heads/<branch>` — was already several commits ahead. All three reviewer slots share one
+  `HEAD_SHA` variable, so the single bad read fanned into all three reviews citing the identical
+  wrong commit and re-raising already-fixed findings as still open: a full paid round spent
+  reviewing stale code.
+
+  Unlike the diff fetch a few lines below it, which retries on *failure*, this read had no such
+  guard — and a stale response is a `200 OK`, indistinguishable from a good one, so retry-on-
+  failure alone would not have caught it. `resolve_head_sha()` now requires two consecutive reads
+  to agree before trusting the result. Covered by `tests/head_sha_test.sh`, which extracts the
+  function verbatim and drives a fake `gh` through the exact stale-then-correct sequence observed,
+  plus the always-stable and never-stabilises cases. Mutation-tested: a version that retries but
+  trusts the first non-empty read (looks like a fix, isn't) fails the test on the same case that
+  cost the round.
+
 ## v1.7.0 (pending)
 
 ### Changed

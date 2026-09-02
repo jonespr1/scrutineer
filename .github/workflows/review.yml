@@ -186,9 +186,28 @@ jobs:
             exit 0
           fi
 
-          # Resolve the PR head commit (pull_request provides it; issue_comment must fetch it).
+          # Resolve the PR head commit on issue_comment (pull_request provides it directly).
+          # A single read here is not safe to trust. On marketing-os#51, an @review comment
+          # posted right after a push got back the PR's FIRST commit from this exact call, while
+          # the real head - cross-checked independently against git/ref/heads/<branch> - was
+          # already several commits ahead. All three reviewer slots share this one variable, so
+          # the one bad read fanned into all three reviews citing the identical wrong commit and
+          # re-raising already-fixed findings as still open: a full paid round spent reviewing
+          # stale code. Unlike the diff fetch below, which retries on FAILURE, a stale read here
+          # is a 200 OK indistinguishable from a good one, so retry-on-failure alone would not
+          # have caught it. Require two consecutive reads to agree before trusting the result.
+          resolve_head_sha() {
+            local prev="" cur="" sa
+            for sa in 1 2 3 4; do
+              cur="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '.head.sha' 2>/dev/null || true)"
+              [ -n "$cur" ] && [ "$cur" = "$prev" ] && break
+              prev="$cur"
+              [ "$sa" -lt 4 ] && sleep 2
+            done
+            printf '%s' "$cur"
+          }
           if [ -z "${HEAD_SHA:-}" ]; then
-            HEAD_SHA="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '.head.sha' 2>/dev/null || true)"
+            HEAD_SHA="$(resolve_head_sha)"
           fi
           SHORT_SHA="${HEAD_SHA:0:7}"
 
