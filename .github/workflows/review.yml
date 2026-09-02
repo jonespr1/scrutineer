@@ -208,6 +208,16 @@ jobs:
           }
           if [ -z "${HEAD_SHA:-}" ]; then
             HEAD_SHA="$(resolve_head_sha)"
+            # Never continue with an unresolved SHA: the review marker template further below
+            # falls back to the literal string "sha=none", which no real commit SHA can ever
+            # match. A review posted under that marker can never be recognised as "already
+            # reviewed" - not once, but forever, for every future @review on this PR - which is
+            # worse than the diff fetch's own failure mode (a red check, no review spent at all).
+            # Fail the same way the diff fetch does: loud, not a silent degrade.
+            if [ -z "${HEAD_SHA:-}" ]; then
+              echo "::error::Could not resolve the PR head commit after repeated attempts (GitHub API degraded?). Failing rather than posting a review that can never be marked as reviewed."
+              exit 1
+            fi
           fi
           SHORT_SHA="${HEAD_SHA:0:7}"
 
@@ -247,17 +257,46 @@ jobs:
           # commits and returns EMPTY -> the review silently no-ops. `gh api ... Accept: diff` always
           # uses the API, so @review works the same as a push. Retry, then fail loudly (never a silent
           # "empty -> exit 0") so a real fetch failure shows red instead of doing nothing.
-          DIFF=""; drc=1
-          for da in 1 2 3; do
-            if DIFF="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" -H "Accept: application/vnd.github.v3.diff" 2>/dev/null)"; then
-              drc=0; break
-            else
-              drc=$?; echo "diff fetch attempt $da failed (rc=$drc)"; [ "$da" -lt 3 ] && sleep $((da*5))
-            fi
-          done
+          fetch_diff() {
+            local d="" rc=1 da
+            for da in 1 2 3; do
+              if d="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" -H "Accept: application/vnd.github.v3.diff" 2>/dev/null)"; then
+                rc=0; break
+              else
+                rc=$?; echo "diff fetch attempt $da failed (rc=$rc)" >&2; [ "$da" -lt 3 ] && sleep $((da*5))
+              fi
+            done
+            printf '%s' "$d"
+            return "$rc"
+          }
+          DIFF="$(fetch_diff)"; drc=$?
           if [ "$drc" -ne 0 ]; then
             echo "::error::Could not fetch the PR diff after 3 attempts (GitHub API degraded?). Failing rather than silently posting nothing."
             exit 1
+          fi
+          # This diff fetch is a separate, later call to the same live endpoint HEAD_SHA was
+          # pinned from above - not guaranteed to still reflect that exact commit if a push landed
+          # in between. Reviewing newer content under an older marker is the same failure class
+          # resolve_head_sha exists to close: a later @review, finding no marker for the commit it
+          # actually reviewed, would re-spend a round that already ran. One check, one re-fetch.
+          # (REPO_FILES and CI_STATE above are not re-fetched on a re-resolve here - both are
+          # advisory context, not the reviewed content itself, so a one-commit-stale file list or
+          # CI signal is a minor cosmetic gap next to reviewing the wrong code under the wrong
+          # marker.)
+          CUR_SHA="$(gh api "repos/${REPO}/pulls/${PR_NUMBER}" --jq '.head.sha' 2>/dev/null || true)"
+          if [ -n "$CUR_SHA" ] && [ "$CUR_SHA" != "$HEAD_SHA" ]; then
+            echo "Head moved from ${HEAD_SHA} to ${CUR_SHA} while fetching the diff; re-resolving once."
+            HEAD_SHA="$(resolve_head_sha)"
+            if [ -z "${HEAD_SHA:-}" ]; then
+              echo "::error::Could not resolve the PR head commit after it moved mid-fetch."
+              exit 1
+            fi
+            SHORT_SHA="${HEAD_SHA:0:7}"
+            DIFF="$(fetch_diff)"; drc=$?
+            if [ "$drc" -ne 0 ]; then
+              echo "::error::Could not re-fetch the PR diff after the head moved (GitHub API degraded?)."
+              exit 1
+            fi
           fi
           if [ -z "$DIFF" ]; then echo "Empty diff; nothing to review."; exit 0; fi
           # 1a) Path exclusions, applied BEFORE the size cap below - which is the entire point.

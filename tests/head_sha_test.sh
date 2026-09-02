@@ -34,15 +34,21 @@ ok()  { printf 'ok    %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; fails=1; }
 
 # Run the SHIPPED function with a fake `gh` returning a caller-supplied sequence of responses
-# (one per call, last value repeats if exhausted) and a fake `sleep` that records how many times
-# it was asked to wait, so the retry/backoff behaviour is actually exercised rather than assumed.
-run_with_sequence() { # sequence (space-separated shas/empties, "" for a failed/empty read)
-  local seq="$1" idxfile
+# (one per call, last value repeats if the sequence is exhausted) and a fake `sleep` that
+# records how many times it was asked to wait, so the retry/backoff behaviour is actually
+# exercised rather than assumed. Sequence elements are passed as separate arguments (not a
+# single space-joined string) and shell-quoted with `%q`, so an intentionally EMPTY element
+# (simulating a failed/empty read) survives - a space-joined string would silently drop it via
+# word-splitting.
+run_with_sequence() { # sequence elements as separate args; "" is a legitimate empty read
+  local idxfile seqlit
   idxfile="$(mktemp)"; echo 0 > "$idxfile"
+  seqlit="$(printf '%q ' "$@")"
   REPO="jonespr1/example" PR_NUMBER="99" IDXFILE="$idxfile" \
   bash -c '
+    set -euo pipefail
     '"$SRC"'
-    declare -a SEQ=('"$(printf '"%s" ' $seq)"')
+    declare -a SEQ=('"$seqlit"')
     SLEEP_CALLS=0
     # gh (and therefore this whole function) is invoked from resolve_head_sha via a $(...)
     # command substitution, which forks a subshell - an in-memory IDX would reset on every
@@ -51,7 +57,11 @@ run_with_sequence() { # sequence (space-separated shas/empties, "" for a failed/
     gh() {
       local idx v
       idx="$(cat "$IDXFILE")"
-      v="${SEQ[$idx]:-${SEQ[-1]}}"
+      # Plain "-", not ":-": an in-bounds element that is itself empty (a deliberate empty-read
+      # test case) must stay empty. ":-" treats "set but empty" the same as "unset" and would
+      # silently replace it with the last element, defeating the whole point of testing a
+      # mid-sequence empty read.
+      v="${SEQ[$idx]-${SEQ[-1]}}"
       [ "$idx" -lt "$((${#SEQ[@]}-1))" ] && echo "$((idx+1))" > "$IDXFILE"
       printf "%s" "$v"
     }
@@ -62,10 +72,15 @@ run_with_sequence() { # sequence (space-separated shas/empties, "" for a failed/
   rm -f "$idxfile"
 }
 
-check() { # desc sequence want_sha want_min_sleeps
-  local desc="$1" seq="$2" want="$3" want_sleeps="$4" got got_sleeps
-  got="$(run_with_sequence "$seq")"
+check() { # desc want want_min_sleeps seq_elem...
+  local desc="$1" want="$2" want_sleeps="$3"; shift 3
+  local got got_sleeps
+  got="$(run_with_sequence "$@")"
+  # Default to 0, not empty: an empty got_sleeps (the |sleeps= marker never reaching the file)
+  # must fail the comparison below rather than making `[ -lt ]` error out silently and the test
+  # print "ok" with the sleep assertion never actually checked.
   got_sleeps="$(grep -o 'sleeps=[0-9]*' /tmp/head_sha_test_stderr | cut -d= -f2)"
+  got_sleeps="${got_sleeps:-0}"
   if [ "$got" != "$want" ]; then
     fail "$desc (got sha='$got' want='$want')"; return
   fi
@@ -83,23 +98,28 @@ SHA_NEW='e287ed979b87c4c4a3c5abef1f8fda82c93ebb4c'
 # (the pre-fix behaviour) returns SHA_OLD here with zero sleeps - this is the case that cost
 # marketing-os#51 a full round.
 check 'stale-then-correct: waits and returns the real head, not the first (stale) read' \
-      "$SHA_OLD $SHA_NEW $SHA_NEW" "$SHA_NEW" 1
+      "$SHA_NEW" 1 "$SHA_OLD" "$SHA_NEW" "$SHA_NEW"
+
+# A transient empty read (network blip) between two good-but-differing reads must not be
+# mistaken for agreement, and must not derail recovery once real reads resume.
+check 'stale, then a dropped read, then correct: still converges on the real head' \
+      "$SHA_NEW" 3 "$SHA_OLD" "" "$SHA_NEW" "$SHA_NEW"
 
 # --- Normal behaviour must be preserved -----------------------------------------------------
 # The common case: the head is already stable, so two reads agree immediately.
 check 'stable from the first read: still confirms with a second read before trusting it' \
-      "$SHA_NEW $SHA_NEW" "$SHA_NEW" 1
+      "$SHA_NEW" 1 "$SHA_NEW" "$SHA_NEW"
 
 # --- Bounded retries, never hangs or crashes ------------------------------------------------
 # Every read differs (a genuinely fast-moving PR, or a persistent API problem) - must still
 # terminate and return something, using its full retry budget rather than giving up early.
 check 'never stabilises: exhausts retries and returns the last read rather than hanging' \
-      "$SHA_OLD a2222222222222222222222222222222222222 a3333333333333333333333333333333333333 $SHA_NEW" \
-      "$SHA_NEW" 3
+      "$SHA_NEW" 3 \
+      "$SHA_OLD" "a2222222222222222222222222222222222222" "a3333333333333333333333333333333333333" "$SHA_NEW"
 
 # Every read empty (API fully down) - must not treat two empty reads as agreement.
 check 'repeated empty reads are never treated as a confirmed match' \
-      " " "" 3
+      "" 3 "" "" "" ""
 
 rm -f /tmp/head_sha_test_stderr
 

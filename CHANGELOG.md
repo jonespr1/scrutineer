@@ -25,6 +25,36 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   trusts the first non-empty read (looks like a fix, isn't) fails the test on the same case that
   cost the round.
 
+  Review of this fix (`#31`) surfaced three more gaps in the same area, all closed here:
+
+  - **An unresolved `HEAD_SHA` degraded silently instead of failing.** If all four reads came back
+    empty, the review still ran and posted with a marker reading `sha=none` — a literal string no
+    real commit SHA can ever match, so that review could never be recognised as "already reviewed"
+    again, for any future commit, ever. Worse than the diff fetch's own failure mode (a red check,
+    nothing spent). Now fails the same way the diff fetch does: loud, before any model is called.
+  - **The diff fetch could still disagree with the just-resolved `HEAD_SHA`.** It's a separate,
+    later call to the same live endpoint, so a push landing in the gap between resolving the SHA
+    and fetching the diff would review newer content under an older marker — the same failure
+    class this whole fix exists to close, just moved one step down. One extra read after the diff
+    fetch now checks for that, and re-resolves and re-fetches once if the head moved.
+  - **`tests/head_sha_test.sh` wasn't wired into CI.** `ci.yml` lists each test file explicitly
+    rather than globbing `tests/*.sh`, and the new file was missing from that list — so the
+    "Unit tests" check that passed on `#31` had never actually run it. Added.
+
+  Three additional test-harness fixes, all mutation-verified: the sequence-encoding helper used
+  `:-` instead of `-` for a fallback lookup, which silently replaced a deliberately-empty sequence
+  element (simulating a dropped read) with the last element — masking the exact case a mid-sequence
+  failure needs to exercise; the sleep-count assertion had no default, so a broken marker capture
+  produced a shell error but still reported the test as passing; and the nested test harness didn't
+  run under `set -euo pipefail` the way production does.
+
+  Declined, with reasoning: cross-checking the resolved SHA against `git/ref/heads/<branch>` as a
+  second, independent source. It would require resolving `.head.repo.full_name` for fork PRs and
+  querying a repository our token has no guaranteed read access to — trading a rare residual race
+  for a new failure mode on every fork PR. Two agreeing reads 2 seconds apart already converts
+  "always wrong on this failure" into "wrong only if the lag exceeds the polling window," which is
+  the trade worth making without that risk.
+
 ## v1.7.0 (pending)
 
 ### Changed
