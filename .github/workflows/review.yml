@@ -60,7 +60,8 @@
 #                        degrades review QUALITY well before it hits any character ceiling, so a
 #                        split is very often the better fix than a bigger number here. A malformed
 #                        or non-positive value falls back to 200000 rather than failing open onto an
-#                        empty diff.
+#                        empty diff. Leading zeros are read as decimal, not octal (bash's own
+#                        comparison does this, matching OPENROUTER_MAXTOKENS) - "0500" is 500.
 #   DIFF_EXCLUDE         Comma-separated globs of paths to keep OUT of the review, e.g.
 #                        "package-lock.json,*.lock,benchmark/results/*". EMPTY BY DEFAULT.
 #                        The diff is capped at DIFF_MAX_CHARS characters (default 200,000) and
@@ -400,7 +401,17 @@ jobs:
           fi
           TRUNC_NOTE=""
           if [ "${#DIFF}" -gt "$MAX" ]; then
-            DIFF="${DIFF:0:$MAX}"; DIFF="${DIFF%$'\n'*}"
+            DIFF="${DIFF:0:$MAX}"
+            # If the MAX-char slice contains no newline at all (DIFF_MAX_CHARS set smaller than
+            # even the first line - a real diff's opening "diff --git a/... b/..." line alone is
+            # ~30-60 chars), "${DIFF%$'\n'*}" has nothing to strip and returns the slice UNCHANGED:
+            # a non-empty, mid-line garbage fragment that is not a truncated diff, is not caught
+            # by the empty-diff guard below (it is not empty), and would still reach a paid model
+            # call. Empty it explicitly in that case instead - the guard below then catches it.
+            case "$DIFF" in
+              *$'\n'*) DIFF="${DIFF%$'\n'*}" ;;
+              *)       DIFF="" ;;
+            esac
             TRUNC_NOTE="$(printf '\n\n> Note: diff truncated at a line boundary; only the first part was reviewed.')"
           fi
           # A cap raised is one thing; a cap low enough to truncate the diff to NOTHING is a
@@ -659,7 +670,12 @@ jobs:
             # fall through to the tps/window logic, which names it.
             if [ "$pt_in" -gt 0 ] && [ "$pt_in" -lt 20000 ] \
                && { [ -z "${MT:-}" ] || [ "$MT" -ge 20000 ]; }; then
-              printf 'The payload is NOT the problem here: this prompt was only %s tokens, against a ceiling of roughly %s characters (DIFF_MAX_CHARS plus CONTEXT_BUDGET). The model over-generated for the size of the diff rather than running out of room for it. Re-run the review - output length varies a lot between hosts and between runs on the same host - or pin this slot to a different model. Trimming the diff will not help.' "$pt_in" "${MAX:-200000}"
+              # $pt_in is TOKENS; ${MAX:-200000} alone is DIFF_MAX_CHARS's CHARACTER count, not the
+              # combined structural ceiling the message describes. Printing one against the other
+              # directly compared tokens to characters and mislabelled a partial number as the sum
+              # - estimate a token figure from both character budgets instead, so the units match.
+              local total_chars=$(( ${MAX:-200000} + ${CONTEXT_BUDGET:-600000} ))
+              printf 'The payload is NOT the problem here: this prompt was only %s tokens, against a ceiling of roughly %s tokens (~%s characters from DIFF_MAX_CHARS plus CONTEXT_BUDGET). The model over-generated for the size of the diff rather than running out of room for it. Re-run the review - output length varies a lot between hosts and between runs on the same host - or pin this slot to a different model. Trimming the diff will not help.' "$pt_in" "$(( total_chars / 4 ))" "$total_chars"
               return
             fi
             # No cap set, so the model stopped on its own limit; only the payload is ours to change.

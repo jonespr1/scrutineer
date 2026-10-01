@@ -122,6 +122,18 @@ out="$(run '0' "$short")"
 case "$out" in *'MAX=[200000]'*) ok 'DIFF_MAX_CHARS=0 falls back to 200000, not MAX=0' ;;
   *) fail "DIFF_MAX_CHARS=0 was accepted ($out)" ;; esac
 
+# --- Whitespace around the value is stripped before validation, not rejected as malformed -------
+# review.yml does this explicitly (MAX="${MAX//[[:space:]]/}") before the digit check, matching
+# OPENROUTER_MAXTOKENS's own tolerance for " 2, 6 ". Without this case, a future edit dropping
+# that strip would start rejecting " 100 " as malformed (the digit check fails on the space) and
+# nothing here would notice - it would just silently fall back to 200000 instead of honouring it.
+out="$(run ' 100 ' "$short")"
+case "$out" in *'MAX=[100]'*) ok "whitespace around DIFF_MAX_CHARS (' 100 ') is stripped, not rejected" ;;
+  *) fail "whitespace-padded DIFF_MAX_CHARS was not honoured ($out)" ;; esac
+out="$(run "$(printf '\t100\n')" "$short")"
+case "$out" in *'MAX=[100]'*) ok 'a tab/newline around DIFF_MAX_CHARS is also stripped' ;;
+  *) fail "tab/newline-padded DIFF_MAX_CHARS was not honoured ($out)" ;; esac
+
 out="$(run '-5' "$short")"
 case "$out" in *'MAX=[200000]'*) ok 'DIFF_MAX_CHARS=-5 falls back to 200000' ;;
   *) fail "DIFF_MAX_CHARS=-5 was accepted ($out)" ;; esac
@@ -156,6 +168,24 @@ got="$(run_exit '1' "$leading_nl")"
 case "$got" in 0\|*'DIFF_MAX_CHARS truncated the diff to nothing'*)
     ok 'a genuine truncation-to-empty (DIFF_MAX_CHARS=1) also hits the guard, not just a pre-empty DIFF' ;;
   *) fail "truncation-caused emptiness did not hit the guard (got=$got)" ;; esac
+
+# The other way to empty a diff via truncation, and the one that actually surfaces in practice:
+# DIFF_MAX_CHARS set smaller than the diff's OWN first line, with no leading newline at all. A
+# real "diff --git a/... b/..." header alone is ~30-60 chars, so this is well within reach of an
+# operator's typo (one digit short), not just a constructed edge case. Without the no-newline
+# branch in the truncation block, this used to leave a non-empty, mid-line garbage fragment that
+# the empty-diff guard could not see (it is not empty) and that still reached a paid model call.
+realdiff="diff --git a/f.txt b/f.txt
+index 1111111..2222222 100644
+--- a/f.txt
++++ b/f.txt
+@@ -1 +1 @@
+-old
++new"
+got="$(run_exit '20' "$realdiff")"
+case "$got" in 0\|*'DIFF_MAX_CHARS truncated the diff to nothing'*)
+    ok 'DIFF_MAX_CHARS smaller than the first line empties the diff instead of a mid-line fragment' ;;
+  *) fail "a cap cutting mid-first-line reached the model with a garbage fragment (got=$got)" ;; esac
 
 [ "$fails" -eq 0 ] && echo "All diff-cap tests passed." || echo "Some diff-cap tests FAILED." >&2
 exit "$fails"

@@ -33,11 +33,33 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   Covered by `tests/diff_cap_test.sh`: extracts the block verbatim, proves the cap can be raised
   (a diff that would have been truncated at the default survives intact) and lowered, that
   malformed/zero/negative values fall back loudly, that truncation always lands on a line
-  boundary, and that a cap truncating a diff to nothing is caught before any model is called -
-  both for an already-empty input and for a genuine truncation-caused one. Mutation-tested across
-  four variants: the variable ignored entirely, validated but silently discarded, the empty-diff
-  guard removed, and the guard present but missing its `exit 0` - each one caught by the test
-  suite before being reverted.
+  boundary, that a value padded with whitespace is still parsed correctly, and that a cap
+  truncating a diff to nothing is caught before any model is called - both for an already-empty
+  input and for a genuine truncation-caused one. Mutation-tested across five variants: the
+  variable ignored entirely, validated but silently discarded, the empty-diff guard removed, the
+  guard present but missing its `exit 0`, and the first-line truncation fix below reverted - each
+  one caught by the test suite before being reverted.
+
+### Fixed
+- **A `DIFF_MAX_CHARS` set smaller than the diff's first line reached the model with a garbage
+  mid-line fragment.** `${DIFF%$'\n'*}` only strips up to the last newline *if one exists* in the
+  truncated slice - with no newline in that slice at all (a real diff's opening
+  `diff --git a/... b/...` line alone runs 30-60 characters, so this fires on any cap smaller than
+  that), the pattern doesn't match and bash's own documented behaviour is to return the string
+  **unchanged**, not empty it. That non-empty fragment is not a truncated diff and is not caught
+  by the empty-diff guard below it (which only checks for empty), so it would still reach a paid
+  model call. Fixed with an explicit `case`/`esac`: strip to the last newline when one is present,
+  otherwise empty the diff outright so the existing guard catches it. New case added to
+  `tests/diff_cap_test.sh`; mutation-tested by reverting to the single unconditional `${DIFF%...}`
+  form and confirming the new case fails.
+- **`cap_advice()`'s small-prompt message compared tokens to characters and mislabelled a partial
+  figure as a combined total.** It printed `$pt_in` (a token count) against `${MAX:-200000}`
+  directly (a character count, `DIFF_MAX_CHARS` alone) while describing that number as "roughly
+  ... characters (DIFF_MAX_CHARS plus CONTEXT_BUDGET)" - wrong on both the units and the sum. Now
+  computes the combined character budget from both `DIFF_MAX_CHARS` and `CONTEXT_BUDGET`, converts
+  it to an estimated token ceiling for the token-to-token comparison, and still reports the
+  character figure separately for the "~N characters" part of the message. `tests/routing_test.sh`
+  passes unchanged - it only asserts on substrings the fix preserved verbatim.
 
 ## v1.7.1 (pending)
 
