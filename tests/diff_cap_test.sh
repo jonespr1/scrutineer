@@ -176,6 +176,19 @@ case "$got" in *'value too great for base'*) fail "DIFF_MAX_CHARS='08' crashed o
   *'MAX=[8]'*) ok "DIFF_MAX_CHARS='08' does not crash and resolves to decimal 8" ;;
   *) fail "DIFF_MAX_CHARS='08' did not resolve to MAX=[8] (got: $got)" ;; esac
 
+# --- A value too large for bash's signed 64-bit arithmetic to normalize safely must fall back ----
+# Bash arithmetic silently WRAPS (no error) past ~9.2e18 rather than rejecting it, so a value with
+# enough digits turns MAX=$((10#$MAX)) into a huge NEGATIVE number with no warning - which then
+# crashes the whole run later at "${DIFF:0:$MAX}" ("substring expression < 0"), the same family of
+# crash as the DIFF_MAX_CHARS=08 case above but reached without an invalid octal digit at all: pure
+# digits, just too many of them.
+got="$(run_raw '9999999999999999999' "$short")"
+code="${got%%|*}"
+case "$code" in 0) ;; *) fail "an oversized DIFF_MAX_CHARS aborted the run (exit $code): $got" ;; esac
+case "$got" in *'substring expression'*) fail "an oversized DIFF_MAX_CHARS crashed on the truncation substring (got: $got)" ;;
+  *'MAX=[200000]'*) ok 'an oversized DIFF_MAX_CHARS (19 nines) falls back to 200000 instead of overflowing' ;;
+  *) fail "an oversized DIFF_MAX_CHARS did not fall back to MAX=[200000] (got: $got)" ;; esac
+
 # --- The guard this change exists for: a cap that truncates to NOTHING must not reach a paid call
 # Constructed directly rather than hunting for a MAX/diff pair that happens to truncate to empty
 # (only a narrow byte-boundary case does, e.g. a diff starting with a newline at MAX=1): the guard

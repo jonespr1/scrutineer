@@ -67,6 +67,17 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   `tests/diff_cap_test.sh` asserting the exact post-truncation length for `0200000` (199976 chars,
   not the octal 65533) and that `08` doesn't crash; mutation-tested by reverting the
   normalization and confirming both new cases fail.
+- **The base-10 fix above introduced a worse crash of its own for an extremely large
+  `DIFF_MAX_CHARS`.** Bash arithmetic is signed 64-bit and silently *wraps*, rather than erroring,
+  past roughly 9.2e18 - so a value like `DIFF_MAX_CHARS=9999999999999999999` (19 nines, a plausible
+  "effectively unlimited" typo) passed the digit check, then `MAX=$((10#$MAX))` silently turned it
+  into a huge **negative** number with no warning, which then crashed the entire run further down at
+  `"${DIFF:0:$MAX}"` (`substring expression < 0`) - the same family of failure as the `08` crash
+  just fixed, reached through valid digits instead of an invalid octal one. No real diff is within
+  a thousand times of even a 15-digit cap, so values longer than that are now rejected at the same
+  point as any other malformed input, before the normalization that could overflow. New test case
+  in `tests/diff_cap_test.sh`; mutation-tested by reverting the length guard and confirming the new
+  case fails (reproducing the exact crash).
 - **`cap_advice()`'s small-prompt message compared tokens to characters and mislabelled a partial
   figure as a combined total.** It printed `$pt_in` (a token count) against `${MAX:-200000}`
   directly (a character count, `DIFF_MAX_CHARS` alone) while describing that number as "roughly

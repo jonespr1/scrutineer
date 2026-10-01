@@ -395,6 +395,13 @@ jobs:
           MAX="${DIFF_MAX_CHARS:-200000}"
           MAX="${MAX//[[:space:]]/}"
           case "$MAX" in *[!0-9]*) MAX="" ;; esac
+          # Also reject anything too long to normalize safely below: bash arithmetic is signed
+          # 64-bit and silently WRAPS (no error) past ~9.2e18 rather than rejecting it, so e.g.
+          # DIFF_MAX_CHARS with 19+ nines would turn MAX=$((10#$MAX)) a few lines down into a huge
+          # NEGATIVE number with no warning - which then crashes the whole run later at
+          # "${DIFF:0:$MAX}" ("substring expression < 0"). No real diff is within a thousand times
+          # of even this bound, so reject it here instead of relying on overflow behaving safely.
+          [ "${#MAX}" -gt 15 ] && MAX=""
           if [ -z "$MAX" ] || [ "$MAX" -lt 1 ]; then
             [ -n "${DIFF_MAX_CHARS:-}" ] && echo "Invalid DIFF_MAX_CHARS='${DIFF_MAX_CHARS}'; using 200000."
             MAX=200000
