@@ -5,6 +5,94 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.8.0 (pending)
+
+### Added
+- **`DIFF_MAX_CHARS` repo Variable makes the diff size cap configurable.** It was a hardcoded
+  200,000-character literal; a genuinely large, honest PR (not one padded by a generated file -
+  that's `DIFF_EXCLUDE`'s job) can now raise it, and a repo that wants tighter cost control can
+  lower it. Default is unchanged at 200000, so no existing repo's behaviour changes.
+
+  Raising it is not usually the right fix for a PR that keeps hitting the cap: review quality
+  degrades well before any character ceiling does on a diff that size, so splitting the PR is
+  very often the better answer - the header comment and `cap_advice()`'s own messages say so
+  rather than just handing over a bigger number.
+
+  A value this is making newly reachable that could not happen before: `DIFF_MAX_CHARS=0` (or
+  small enough to truncate a diff down to nothing) would silently reach a paid model call with an
+  empty diff - the same "confidently wrong on a partial payload" failure `DIFF_EXCLUDE`'s
+  all-matched guard already exists to prevent, for a different cause. A malformed or non-positive
+  value now falls back to 200000 with a warning (matching `OPENROUTER_MAXTOKENS`'s existing
+  precedent), and a cap that truncates to nothing exits 0 with a clear diagnostic rather than
+  spending a round reviewing nothing.
+
+  `cap_advice()`'s messages, which used to hardcode "200,000" in three places, now reference the
+  actual configured cap - a repo that raises `DIFF_MAX_CHARS` gets accurate advice instead of a
+  stale number.
+
+  Covered by `tests/diff_cap_test.sh`: extracts the block verbatim, proves the cap can be raised
+  (a diff that would have been truncated at the default survives intact) and lowered, that
+  malformed/zero/negative values fall back loudly, that truncation always lands on a line
+  boundary (asserted against the exact expected cut, not just "doesn't end with a newline" - see
+  Fixed below for why that distinction matters), that a value padded with whitespace is still
+  parsed correctly, that a leading zero is read as decimal everywhere `$MAX` is used, and that a
+  cap truncating a diff to nothing is caught before any model is called - both for an
+  already-empty input and for a genuine truncation-caused one. Mutation-tested across six
+  variants: the variable ignored entirely, validated but silently discarded, the empty-diff guard
+  removed, the guard present but missing its `exit 0`, the first-line truncation fix reverted, and
+  the base-10 normalization fix reverted - each one caught by the test suite before being
+  reverted.
+
+### Fixed
+- **A `DIFF_MAX_CHARS` set smaller than the diff's first line reached the model with a garbage
+  mid-line fragment.** `${DIFF%$'\n'*}` only strips up to the last newline *if one exists* in the
+  truncated slice - with no newline in that slice at all (a real diff's opening
+  `diff --git a/... b/...` line alone runs 30-60 characters, so this fires on any cap smaller than
+  that), the pattern doesn't match and bash's own documented behaviour is to return the string
+  **unchanged**, not empty it. That non-empty fragment is not a truncated diff and is not caught
+  by the empty-diff guard below it (which only checks for empty), so it would still reach a paid
+  model call. Fixed with an explicit `case`/`esac`: strip to the last newline when one is present,
+  otherwise empty the diff outright so the existing guard catches it. New case added to
+  `tests/diff_cap_test.sh`; mutation-tested by reverting to the single unconditional `${DIFF%...}`
+  form and confirming the new case fails.
+- **A leading zero in `DIFF_MAX_CHARS` was read as decimal for validation but as octal for the
+  truncation itself.** `[ "$MAX" -lt 1 ]` and `[ "${#DIFF}" -gt "$MAX" ]` go through the `test`
+  builtin, which always reads `$MAX` as decimal - but `"${DIFF:0:$MAX}"` a few lines later is a
+  bash *arithmetic* substring length, which reads a leading zero as octal. `DIFF_MAX_CHARS=0200000`
+  passed validation as 200000 but silently truncated at 65536 (0200000 in octal) with no
+  indication the configured value had been misread, and `DIFF_MAX_CHARS=08` crashed the entire run
+  (`08: value too great for base`, 8 not being a valid octal digit) after the diff fetch had
+  already succeeded. Fixed with `MAX=$((10#$MAX))` right after validation, mirroring
+  `OPENROUTER_MAXTOKENS`'s identical existing normalization. New cases added to
+  `tests/diff_cap_test.sh` asserting the exact post-truncation length for `0200000` (199976 chars,
+  not the octal 65533) and that `08` doesn't crash; mutation-tested by reverting the
+  normalization and confirming both new cases fail.
+- **The base-10 fix above introduced a worse crash of its own for an extremely large
+  `DIFF_MAX_CHARS`.** Bash arithmetic is signed 64-bit and silently *wraps*, rather than erroring,
+  past roughly 9.2e18 - so a value like `DIFF_MAX_CHARS=9999999999999999999` (19 nines, a plausible
+  "effectively unlimited" typo) passed the digit check, then `MAX=$((10#$MAX))` silently turned it
+  into a huge **negative** number with no warning, which then crashed the entire run further down at
+  `"${DIFF:0:$MAX}"` (`substring expression < 0`) - the same family of failure as the `08` crash
+  just fixed, reached through valid digits instead of an invalid octal one. No real diff is within
+  a thousand times of even a 15-digit cap, so values longer than that are now rejected at the same
+  point as any other malformed input, before the normalization that could overflow. New test case
+  in `tests/diff_cap_test.sh`; mutation-tested by reverting the length guard and confirming the new
+  case fails (reproducing the exact crash).
+- **`cap_advice()`'s small-prompt message compared tokens to characters and mislabelled a partial
+  figure as a combined total.** It printed `$pt_in` (a token count) against `${MAX:-200000}`
+  directly (a character count, `DIFF_MAX_CHARS` alone) while describing that number as "roughly
+  ... characters (DIFF_MAX_CHARS plus CONTEXT_BUDGET)" - wrong on both the units and the sum. Now
+  computes the combined character budget from both `DIFF_MAX_CHARS` and `CONTEXT_BUDGET`, converts
+  it to an estimated token ceiling for the token-to-token comparison, and still reports the
+  character figure separately for the "~N characters" part of the message. `tests/routing_test.sh`
+  passes unchanged - it only asserts on substrings the fix preserved verbatim.
+- **The "truncation lands on a line boundary" test was vacuous.** It asserted the truncated diff
+  did not end with a literal `\n` - but the value had already passed through `$(...)` command
+  substitution, which unconditionally strips all trailing newlines regardless of where the real
+  cut landed. The assertion could not fail even on a mid-line truncation. Replaced with an
+  exact-match assertion against the specific content a `DIFF_MAX_CHARS=100` cut on the test's
+  fixture diff must produce.
+
 ## v1.7.1 (pending)
 
 ### Fixed
