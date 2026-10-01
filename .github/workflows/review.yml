@@ -60,8 +60,8 @@
 #                        degrades review QUALITY well before it hits any character ceiling, so a
 #                        split is very often the better fix than a bigger number here. A malformed
 #                        or non-positive value falls back to 200000 rather than failing open onto an
-#                        empty diff. Leading zeros are read as decimal, not octal (bash's own
-#                        comparison does this, matching OPENROUTER_MAXTOKENS) - "0500" is 500.
+#                        empty diff. Leading zeros are read as decimal, not octal - forced via
+#                        MAX=$((10#$MAX)), mirroring OPENROUTER_MAXTOKENS - so "0500" is 500.
 #   DIFF_EXCLUDE         Comma-separated globs of paths to keep OUT of the review, e.g.
 #                        "package-lock.json,*.lock,benchmark/results/*". EMPTY BY DEFAULT.
 #                        The diff is capped at DIFF_MAX_CHARS characters (default 200,000) and
@@ -653,8 +653,8 @@ jobs:
           # static string cannot tell those apart, so the remedy is derived rather than asserted:
           # extrapolate what this host could emit inside the window from what it just did.
           #
-          # Reads $el, $timeout, $MT, $resp and $MAX from the calling function - bash is
-          # dynamically scoped, and this is only ever called from call_openrouter after the
+          # Reads $el, $timeout, $MT, $resp, $MAX and $CONTEXT_BUDGET from the calling function -
+          # bash is dynamically scoped, and this is only ever called from call_openrouter after the
           # request returns. $MAX is set once, at the top level, before any reviewer slot starts;
           # every backgrounded slot forks from that point and keeps its own copy.
           cap_advice() {
