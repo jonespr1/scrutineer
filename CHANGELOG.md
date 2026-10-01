@@ -33,12 +33,15 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   Covered by `tests/diff_cap_test.sh`: extracts the block verbatim, proves the cap can be raised
   (a diff that would have been truncated at the default survives intact) and lowered, that
   malformed/zero/negative values fall back loudly, that truncation always lands on a line
-  boundary, that a value padded with whitespace is still parsed correctly, and that a cap
-  truncating a diff to nothing is caught before any model is called - both for an already-empty
-  input and for a genuine truncation-caused one. Mutation-tested across five variants: the
-  variable ignored entirely, validated but silently discarded, the empty-diff guard removed, the
-  guard present but missing its `exit 0`, and the first-line truncation fix below reverted - each
-  one caught by the test suite before being reverted.
+  boundary (asserted against the exact expected cut, not just "doesn't end with a newline" - see
+  Fixed below for why that distinction matters), that a value padded with whitespace is still
+  parsed correctly, that a leading zero is read as decimal everywhere `$MAX` is used, and that a
+  cap truncating a diff to nothing is caught before any model is called - both for an
+  already-empty input and for a genuine truncation-caused one. Mutation-tested across six
+  variants: the variable ignored entirely, validated but silently discarded, the empty-diff guard
+  removed, the guard present but missing its `exit 0`, the first-line truncation fix reverted, and
+  the base-10 normalization fix reverted - each one caught by the test suite before being
+  reverted.
 
 ### Fixed
 - **A `DIFF_MAX_CHARS` set smaller than the diff's first line reached the model with a garbage
@@ -52,6 +55,18 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   otherwise empty the diff outright so the existing guard catches it. New case added to
   `tests/diff_cap_test.sh`; mutation-tested by reverting to the single unconditional `${DIFF%...}`
   form and confirming the new case fails.
+- **A leading zero in `DIFF_MAX_CHARS` was read as decimal for validation but as octal for the
+  truncation itself.** `[ "$MAX" -lt 1 ]` and `[ "${#DIFF}" -gt "$MAX" ]` go through the `test`
+  builtin, which always reads `$MAX` as decimal - but `"${DIFF:0:$MAX}"` a few lines later is a
+  bash *arithmetic* substring length, which reads a leading zero as octal. `DIFF_MAX_CHARS=0200000`
+  passed validation as 200000 but silently truncated at 65536 (0200000 in octal) with no
+  indication the configured value had been misread, and `DIFF_MAX_CHARS=08` crashed the entire run
+  (`08: value too great for base`, 8 not being a valid octal digit) after the diff fetch had
+  already succeeded. Fixed with `MAX=$((10#$MAX))` right after validation, mirroring
+  `OPENROUTER_MAXTOKENS`'s identical existing normalization. New cases added to
+  `tests/diff_cap_test.sh` asserting the exact post-truncation length for `0200000` (199976 chars,
+  not the octal 65533) and that `08` doesn't crash; mutation-tested by reverting the
+  normalization and confirming both new cases fail.
 - **`cap_advice()`'s small-prompt message compared tokens to characters and mislabelled a partial
   figure as a combined total.** It printed `$pt_in` (a token count) against `${MAX:-200000}`
   directly (a character count, `DIFF_MAX_CHARS` alone) while describing that number as "roughly
@@ -60,6 +75,12 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   it to an estimated token ceiling for the token-to-token comparison, and still reports the
   character figure separately for the "~N characters" part of the message. `tests/routing_test.sh`
   passes unchanged - it only asserts on substrings the fix preserved verbatim.
+- **The "truncation lands on a line boundary" test was vacuous.** It asserted the truncated diff
+  did not end with a literal `\n` - but the value had already passed through `$(...)` command
+  substitution, which unconditionally strips all trailing newlines regardless of where the real
+  cut landed. The assertion could not fail even on a mid-line truncation. Replaced with an
+  exact-match assertion against the specific content a `DIFF_MAX_CHARS=100` cut on the test's
+  fixture diff must produce.
 
 ## v1.7.1 (pending)
 

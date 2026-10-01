@@ -103,10 +103,20 @@ case "$out" in *'NOTE=[]'*) fail 'DIFF_MAX_CHARS=100: a 500-char diff was NOT tr
   *) ok 'DIFF_MAX_CHARS=100: a diff the default cap would leave alone is truncated' ;; esac
 
 # --- Truncation lands on a line boundary, never mid-line ----------------------------------------
+# diff_field() reads back through $(...) command substitution, which strips ALL trailing
+# newlines unconditionally - so a prior version of this check (fail if the result ends with a
+# literal \n) could never fire regardless of where the shipped code actually cut: a vacuous
+# assertion that passed even on a mid-line truncation. Assert the exact expected content
+# instead, computed independently from the $short fixture above: the last newline before byte
+# 100 falls right after "@@ -1 +1 @@".
+expected_boundary="diff --git a/f.txt b/f.txt
+index 1111111..2222222 100644
+--- a/f.txt
++++ b/f.txt
+@@ -1 +1 @@"
 diffout="$(diff_field "$out")"
-case "$diffout" in *$'\n') fail 'truncated diff ends mid-line, not on a line boundary' ;;
-  '') fail "truncated diff is unexpectedly empty for DIFF_MAX_CHARS=100 ($out)" ;;
-  *) ok 'truncated diff ends on a full line' ;; esac
+case "$diffout" in "$expected_boundary") ok 'DIFF_MAX_CHARS=100 truncation lands exactly on the expected line boundary' ;;
+  *) fail "DIFF_MAX_CHARS=100 truncation does not match the expected line-boundary cut (got: $diffout)" ;; esac
 
 # --- Malformed and non-positive values fall back to the default, loudly -----------------------
 # review.yml's own warning (matching OPENROUTER_MAXTOKENS's existing precedent) is a plain
@@ -137,6 +147,34 @@ case "$out" in *'MAX=[100]'*) ok 'a tab/newline around DIFF_MAX_CHARS is also st
 out="$(run '-5' "$short")"
 case "$out" in *'MAX=[200000]'*) ok 'DIFF_MAX_CHARS=-5 falls back to 200000' ;;
   *) fail "DIFF_MAX_CHARS=-5 was accepted ($out)" ;; esac
+
+# --- A leading zero is decimal everywhere $MAX is used, not just where it was validated ---------
+# [ -lt ]/[ -gt ] (the test builtin, used for validation above) always read $MAX as decimal, but
+# "${DIFF:0:$MAX}" a few lines down is a bash ARITHMETIC substring length, which reads a leading
+# zero as OCTAL. Without forcing base 10 once validation accepts the value, DIFF_MAX_CHARS=0200000
+# would pass validation as (decimal) 200000 but actually truncate at 65536 - 0200000 read as octal
+# - with no warning that the configured value was misread, and DIFF_MAX_CHARS=08 would abort the
+# whole run ("08: value too great for base", 8 not being a valid octal digit) after the diff fetch
+# already succeeded.
+out="$(run '0200000' "$long")"
+case "$out" in *'MAX=[200000]'*) ok "DIFF_MAX_CHARS='0200000' is read as decimal 200000, not octal 65536" ;;
+  *) fail "DIFF_MAX_CHARS='0200000' was not normalized to decimal (got: $out)" ;; esac
+# The 250000-char diff still gets truncated (200000 < 250000) - what matters is WHERE. Truncated
+# at the correct decimal cap the result is 199976 chars (last newline below 200000); truncated at
+# the octal misreading (65536) it would be only 65533. Assert the decimal-length result so this
+# would catch a regression to the octal interpretation, not just the absence of truncation.
+diffout="$(diff_field "$out")"
+case "${#diffout}" in 199976) ok "DIFF_MAX_CHARS='0200000' truncates at the decimal length (199976 chars), not the octal one (65533)" ;;
+  *) fail "DIFF_MAX_CHARS='0200000' truncated to ${#diffout} chars, not the expected decimal length 199976 ($out)" ;; esac
+
+# A diff no longer than 8 chars stays under MAX, so the truncation/empty-diff branches never fire
+# here - this isolates the normalization itself from the (already-covered) guard behaviour.
+got="$(run_raw '08' 'ab')"
+code="${got%%|*}"
+case "$code" in 0) ;; *) fail "DIFF_MAX_CHARS='08' aborted the run (exit $code): $got" ;; esac
+case "$got" in *'value too great for base'*) fail "DIFF_MAX_CHARS='08' crashed on an invalid octal digit (got: $got)" ;;
+  *'MAX=[8]'*) ok "DIFF_MAX_CHARS='08' does not crash and resolves to decimal 8" ;;
+  *) fail "DIFF_MAX_CHARS='08' did not resolve to MAX=[8] (got: $got)" ;; esac
 
 # --- The guard this change exists for: a cap that truncates to NOTHING must not reach a paid call
 # Constructed directly rather than hunting for a MAX/diff pair that happens to truncate to empty

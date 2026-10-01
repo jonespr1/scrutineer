@@ -399,6 +399,15 @@ jobs:
             [ -n "${DIFF_MAX_CHARS:-}" ] && echo "Invalid DIFF_MAX_CHARS='${DIFF_MAX_CHARS}'; using 200000."
             MAX=200000
           fi
+          # Force base 10 (mirroring OPENROUTER_MAXTOKENS's identical MT=$((10#$MT)) below): the
+          # [ -lt ]/[ -gt ] checks above read $MAX via the test builtin, which is always decimal,
+          # but "${DIFF:0:$MAX}" further down is a bash ARITHMETIC substring length, which reads a
+          # leading-zero value as OCTAL. Left alone, a value like DIFF_MAX_CHARS=0200000 passes
+          # validation as 200000 but truncates at 65536 (octal) with no warning, and
+          # DIFF_MAX_CHARS=08 aborts the whole run ("08: value too great for base") after the diff
+          # fetch already succeeded. Normalizing here makes every later use of $MAX agree with the
+          # decimal value the validation above already accepted.
+          MAX=$((10#$MAX))
           TRUNC_NOTE=""
           if [ "${#DIFF}" -gt "$MAX" ]; then
             DIFF="${DIFF:0:$MAX}"
