@@ -18,7 +18,7 @@ WF="$HERE/../.github/workflows/review.yml"
 
 # --- Extract the exclusion block ----------------------------------------------------------------
 # Runs from `EXPATS=()` up to (not including) the `MAX=` line that begins the size cap.
-SRC="$(awk '/^          EXPATS=\(\)$/,/^          MAX=200000$/' "$WF" | sed '$d' | sed 's/^          //')"
+SRC="$(awk '/^          EXPATS=\(\)$/,/^          MAX="\$\{DIFF_MAX_CHARS:-200000\}"$/' "$WF" | sed '$d' | sed 's/^          //')"
 bad() { echo "FAIL: bad extraction of the DIFF_EXCLUDE block from $WF - $1" >&2; exit 1; }
 [ -n "$SRC" ]                                     || bad "nothing matched (has the block moved?)"
 printf '%s' "$SRC" | grep -q 'path_excluded'      || bad "no path_excluded function"

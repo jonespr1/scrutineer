@@ -5,6 +5,40 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.8.0 (pending)
+
+### Added
+- **`DIFF_MAX_CHARS` repo Variable makes the diff size cap configurable.** It was a hardcoded
+  200,000-character literal; a genuinely large, honest PR (not one padded by a generated file -
+  that's `DIFF_EXCLUDE`'s job) can now raise it, and a repo that wants tighter cost control can
+  lower it. Default is unchanged at 200000, so no existing repo's behaviour changes.
+
+  Raising it is not usually the right fix for a PR that keeps hitting the cap: review quality
+  degrades well before any character ceiling does on a diff that size, so splitting the PR is
+  very often the better answer - the header comment and `cap_advice()`'s own messages say so
+  rather than just handing over a bigger number.
+
+  A value this is making newly reachable that could not happen before: `DIFF_MAX_CHARS=0` (or
+  small enough to truncate a diff down to nothing) would silently reach a paid model call with an
+  empty diff - the same "confidently wrong on a partial payload" failure `DIFF_EXCLUDE`'s
+  all-matched guard already exists to prevent, for a different cause. A malformed or non-positive
+  value now falls back to 200000 with a warning (matching `OPENROUTER_MAXTOKENS`'s existing
+  precedent), and a cap that truncates to nothing exits 0 with a clear diagnostic rather than
+  spending a round reviewing nothing.
+
+  `cap_advice()`'s messages, which used to hardcode "200,000" in three places, now reference the
+  actual configured cap - a repo that raises `DIFF_MAX_CHARS` gets accurate advice instead of a
+  stale number.
+
+  Covered by `tests/diff_cap_test.sh`: extracts the block verbatim, proves the cap can be raised
+  (a diff that would have been truncated at the default survives intact) and lowered, that
+  malformed/zero/negative values fall back loudly, that truncation always lands on a line
+  boundary, and that a cap truncating a diff to nothing is caught before any model is called -
+  both for an already-empty input and for a genuine truncation-caused one. Mutation-tested across
+  four variants: the variable ignored entirely, validated but silently discarded, the empty-diff
+  guard removed, and the guard present but missing its `exit 0` - each one caught by the test
+  suite before being reverted.
+
 ## v1.7.1 (pending)
 
 ### Fixed
