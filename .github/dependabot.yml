@@ -10,10 +10,11 @@
 # it never moves on its own. Dependabot is what moves it. Without this file
 # those pins sit unattended indefinitely, looking secure while going stale.
 #
-# The 3-day cooldown is the supply-chain guard: most malicious releases are
-# caught and pulled within hours to a few days, so a release that new is never
-# proposed. 3 days matches GitHub's own default and is now explicit. Security
-# updates are never delayed by cooldown (GitHub docs).
+# Cooldown (GitHub docs, Dependabot options reference, "cooldown"): version
+# updates wait until a release has aged; security updates are never delayed.
+# 3 days is GitHub's documented default, made explicit. Most malicious releases
+# are caught and pulled within hours to a few days, so a release that new is
+# rarely proposed.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -27,7 +28,7 @@ updates:
     # discover during an incident.
     open-pull-requests-limit: 10
     cooldown:
-      default-days: 3
+      default-days: 3 # default-days only: semver-*-days apply to npm and pip
     # .github/workflows/scrutineer.yml dogfoods this repo's OWN reviewer at
     # jonespr1/scrutineer/.github/workflows/review.yml@v1 - the same moving tag
     # every consumer pins, retagged on each release. Dependabot cannot express
