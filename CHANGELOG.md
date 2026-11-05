@@ -23,7 +23,7 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   empty diff - the same "confidently wrong on a partial payload" failure `DIFF_EXCLUDE`'s
   all-matched guard already exists to prevent, for a different cause. A malformed or non-positive
   value now falls back to 200000 with a warning (matching `OPENROUTER_MAXTOKENS`'s existing
-  precedent), and a cap that truncates to nothing exits 0 with a clear diagnostic rather than
+  precedent), and a cap that truncates to nothing exits 0 with a clear diagnostic and a PR comment rather than
   spending a round reviewing nothing.
 
   `cap_advice()`'s messages, which used to hardcode "200,000" in three places, now reference the
