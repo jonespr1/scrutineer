@@ -109,6 +109,7 @@ unless noted.
 | `OPENROUTER_MAXPRICE` | *(none)* | Hard ceiling `"$in,$out"` per 1M tokens, e.g. `"2,6"` |
 | `OPENROUTER_ZDR` | `true` | Zero-data-retention hosts only (on by default). Set `false` to allow non-ZDR hosts |
 | `CONTEXT_BUDGET` | `600000` | Max characters of full changed-file content sent alongside the diff. Both Gemini and GLM have ~1M-token context, so this is a cost/latency guard rather than a context limit; the default fits every changed file in a normal PR. Raise or lower to taste |
+| `DIFF_MAX_CHARS` | `200000` | Character cap on the diff sent for review, truncated at a line boundary. A malformed, non-positive or over-15-digit value falls back to the default with a warning. A cap smaller than the diff's first line posts a "no review was produced" comment instead of reviewing nothing. Raising it is rarely the right fix: use `DIFF_EXCLUDE` or split the PR |
 | `GEMINI_API_KEY` | - | **Secret** for direct Gemini slots |
 | `OPENROUTER_API_KEY` | - | **Secret** for OpenRouter slots |
 
