@@ -88,7 +88,7 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   computes the combined character budget from both `DIFF_MAX_CHARS` and `CONTEXT_BUDGET`, converts
   it to an estimated token ceiling for the token-to-token comparison, and still reports the
   character figure separately for the "~N characters" part of the message. `tests/routing_test.sh`
-  passes unchanged - it only asserts on substrings the fix preserved verbatim.
+  passes unchanged - it only asserts on substrings the fix preserved verbatim. The derived figures are pinned by the `cap_advice()` cases in `tests/diff_cap_test.sh`.
 - **The "truncation lands on a line boundary" test was vacuous.** It asserted the truncated diff
   did not end with a literal `\n` - but the value had already passed through `$(...)` command
   substitution, which unconditionally strips all trailing newlines regardless of where the real
