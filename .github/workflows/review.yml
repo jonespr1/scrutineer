@@ -428,6 +428,13 @@ jobs:
               *$'\n'*) DIFF="${DIFF%$'\n'*}" ;;
               *)       DIFF="" ;;
             esac
+            # A cap that lands inside the first file's header (after its "diff --git" line, before
+            # any "@@" hunk) leaves a header with no changes in it: also not a reviewable payload.
+            case "$DIFF" in
+              *$'
+@@'*) ;;
+              *)         DIFF="" ;;
+            esac
             TRUNC_NOTE="$(printf '\n\n> Note: diff truncated at a line boundary; only the first part was reviewed.')"
           fi
           # A cap raised is one thing; a cap low enough to truncate the diff to NOTHING is a
@@ -438,7 +445,7 @@ jobs:
             echo "DIFF_MAX_CHARS truncated the diff to nothing; nothing left to review. Check the configured value (currently ${MAX})."
             # Exiting 0 with only a log line leaves the PR author seeing no review and no reason.
             # Say so on the PR; best-effort, so a comment failure never turns this into a red run.
-            printf '%s' "⚠️ **No review was produced.** The \`DIFF_MAX_CHARS\` repo variable (currently ${MAX} characters) is smaller than the first line of this PR's diff, so nothing was left to review and no model was called. Raise or remove the variable (default 200000)." \
+            printf '%s' "⚠️ **No review was produced.** The \`DIFF_MAX_CHARS\` repo variable (currently ${MAX} characters) is too small to hold even the first hunk of this PR's diff, so nothing was left to review and no model was called. Raise or remove the variable (default 200000)." \
               | gh pr comment "$PR_NUMBER" --repo "$REPO" --body-file - || true
             exit 0
           fi

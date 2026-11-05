@@ -198,9 +198,9 @@ run_exit() { # $1 = DIFF_MAX_CHARS, $2 = DIFF -> "<exit code>|<stdout>"
   local diffile out code
   diffile="$(mktemp)"; printf '%s' "$2" > "$diffile"
   out="$(DIFF_MAX_CHARS="$1" DIFFFILE="$diffile" bash -c '
-    set -uo pipefail
+    set -euo pipefail   # production runs under -e; the gh failure case below depends on it
     REPO=o/r; PR_NUMBER=7
-    gh() { echo "GH_CALL $*"; cat; echo; }   # stub: records the PR comment instead of posting it
+    gh() { echo "GH_CALL $*"; cat; echo; [ -z "${GHFAIL:-}" ]; }   # stub: records the PR comment instead of posting it
     DIFF="$(cat "$DIFFFILE")"
     '"$SRC"'
     echo "REACHED_PAST_GUARD"
@@ -239,6 +239,13 @@ got="$(run_exit '20' "$realdiff")"
 case "$got" in 0\|*'DIFF_MAX_CHARS truncated the diff to nothing'*)
     ok 'DIFF_MAX_CHARS smaller than the first line empties the diff instead of a mid-line fragment' ;;
   *) fail "a cap cutting mid-first-line reached the model with a garbage fragment (got=$got)" ;; esac
+# Cap lands after the header line but before any hunk: header-only payload must also be emptied.
+got="$(run_exit '40' "$realdiff")"
+case "$got" in 0|*'DIFF_MAX_CHARS truncated the diff to nothing'*) ok 'a cap inside the file header (before any hunk) empties the diff' ;;
+  *) fail "header-only payload reached the model (got=$got)" ;; esac
+# A failing gh (e.g. no pull-requests: write) must not turn the guard into a failed step.
+got="$(GHFAIL=1 run_exit '20' "$realdiff")"
+case "$got" in 0|*) ok 'a failing gh pr comment still exits 0' ;; *) fail "gh failure broke the guard (got=$got)" ;; esac
 # The PR author must SEE this: the guard posts a PR comment naming the variable and its value.
 case "$got" in *'GH_CALL pr comment 7 --repo o/r'*'No review was produced'*'currently 20 characters'*)
     ok 'the empty-after-cap guard posts a visible PR comment naming DIFF_MAX_CHARS and its value' ;;
