@@ -243,6 +243,13 @@ case "$got" in 0\|*'DIFF_MAX_CHARS truncated the diff to nothing'*)
 got="$(run_exit '40' "$realdiff")"
 case "$got" in 0\|*'DIFF_MAX_CHARS truncated the diff to nothing'*) ok 'a cap inside the file header (before any hunk) empties the diff' ;;
   *) fail "header-only payload reached the model (got=$got)" ;; esac
+# De-dup: the same notice for the same value is not posted twice; a different value is.
+prior='[{"user":{"type":"Bot"},"body":"x No review was produced. y (currently 20 characters) z"}]'
+got="$(COMMENTS_JSON="$prior" run_exit '20' "$realdiff")"
+case "$got" in *GH_CALL*) fail "duplicate notice posted for an unchanged DIFF_MAX_CHARS (got=$got)" ;;
+  0|*) ok 'an identical notice already on the PR is not posted again' ;; *) fail "dedupe run did not exit 0 (got=$got)" ;; esac
+got="$(COMMENTS_JSON="$prior" run_exit '21' "$realdiff")"
+case "$got" in *GH_CALL*) ok 'a changed DIFF_MAX_CHARS value gets a fresh notice' ;; *) fail "no fresh notice for a changed value (got=$got)" ;; esac
 # A failing gh (e.g. no pull-requests: write) must not turn the guard into a failed step.
 got="$(GHFAIL=1 run_exit '20' "$realdiff")"
 case "$got" in 0\|*) ok 'a failing gh pr comment still exits 0' ;; *) fail "gh failure broke the guard (got=$got)" ;; esac

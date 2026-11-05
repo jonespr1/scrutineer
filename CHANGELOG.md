@@ -44,6 +44,9 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   reverted.
 
 ### Fixed
+- **A cap landing inside the first file's header, before any `@@` hunk, left a hunk-free stub.**
+  The payload is now emptied, so the empty-diff guard fires and the PR gets a "No review was
+  produced" comment (posted once per configured value) rather than a paid call on a bare header.
 - **A `DIFF_MAX_CHARS` set smaller than the diff's first line reached the model with a garbage
   mid-line fragment.** `${DIFF%$'\n'*}` only strips up to the last newline *if one exists* in the
   truncated slice - with no newline in that slice at all (a real diff's opening
