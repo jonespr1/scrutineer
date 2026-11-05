@@ -247,7 +247,7 @@ case "$got" in 0\|*'DIFF_MAX_CHARS truncated the diff to nothing'*) ok 'a cap in
 prior='[{"user":{"type":"Bot"},"body":"x No review was produced. y (currently 20 characters) z"}]'
 got="$(COMMENTS_JSON="$prior" run_exit '20' "$realdiff")"
 case "$got" in *GH_CALL*) fail "duplicate notice posted for an unchanged DIFF_MAX_CHARS (got=$got)" ;;
-  0|*) ok 'an identical notice already on the PR is not posted again' ;; *) fail "dedupe run did not exit 0 (got=$got)" ;; esac
+  0\|*) ok 'an identical notice already on the PR is not posted again' ;; *) fail "dedupe run did not exit 0 (got=$got)" ;; esac
 got="$(COMMENTS_JSON="$prior" run_exit '21' "$realdiff")"
 case "$got" in *GH_CALL*) ok 'a changed DIFF_MAX_CHARS value gets a fresh notice' ;; *) fail "no fresh notice for a changed value (got=$got)" ;; esac
 # A failing gh (e.g. no pull-requests: write) must not turn the guard into a failed step.
