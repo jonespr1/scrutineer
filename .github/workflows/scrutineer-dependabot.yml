@@ -1,0 +1,82 @@
+# Scrutineer for Dependabot pull requests.
+# Copy to a project repo as .github/workflows/scrutineer-dependabot.yml, next to
+# its scrutineer.yml. Policy: standards/devops.md rule 22 - every dependency PR,
+# Dependabot's included, merges only once Scrutineer is clear on its current head.
+#
+# Why this is a sibling and not a change to scrutineer.yml:
+#
+# scrutineer.yml skips bot-authored PRs, and it cannot simply stop skipping them.
+# GitHub treats Dependabot-triggered `pull_request` runs like fork runs: they get
+# Dependabot secrets, not Actions secrets, so GEMINI_API_KEY / OPENROUTER_API_KEY
+# resolve empty, review.yml posts its "no API key configured" notice and exits 0.
+# The job would look green while reviewing nothing. scrutineer.yml also says it
+# should never need changing (its "@review" matcher lives in the reusable workflow
+# precisely so it doesn't), so Dependabot policy lives here instead.
+#
+# Every Dependabot PR is reviewed, not only majors. A minor or patch can still
+# change behaviour the test suite never exercises, and a grouped PR can carry a
+# release younger than the cooldown (rule 23), so a second pair of eyes on the
+# lockfile diff is worth the few pence a round costs.
+#
+# WHY pull_request_target AND NOT pull_request:
+# `pull_request_target` runs in the BASE repo context, so the real secrets are
+# present. That trigger is dangerous when a workflow checks out and EXECUTES PR
+# code. This one does not, and neither does what it calls: review.yml reads the
+# diff through `gh api`, and its only checkout is for an optional
+# .review/styleguide.md with persist-credentials:false and no ref, which under
+# pull_request_target resolves to the base branch, not the PR. Nothing from the
+# pull request is ever executed. Keep it that way: if review.yml ever gains a
+# build or install step, this trigger must be revisited.
+#
+# It also runs on 'synchronize' (every Dependabot rebase or push), because rule 22
+# needs Scrutineer to be clear on the PR's CURRENT head and a rebase changes the
+# head. That costs a review round per rebase (a few pence). A person can also
+# comment "@review" at any time; that runs through scrutineer.yml's
+# issue_comment path, which checks who wrote the comment, not who opened the PR,
+# so it works on Dependabot PRs too.
+name: 'Scrutineer (Dependabot)'
+
+on:
+  pull_request_target:
+    types: ['opened', 'reopened', 'synchronize']
+
+# One review per pull request at a time, and the newest head wins: a review of a
+# head that has since been rebased away is worthless under rule 22.
+concurrency:
+  group: 'scrutineer-dependabot-${{ github.event.pull_request.number }}'
+  cancel-in-progress: true
+
+# Default to nothing; the job grants only what it needs.
+permissions: {}
+
+jobs:
+  review:
+    name: 'Review'
+    # pull_request_target fires for EVERY pull request (`on:` cannot be
+    # conditioned), so this `if:` is the guard: it is evaluated before a runner is
+    # allocated, and nothing below is granted unless Dependabot opened the PR.
+    if: "github.event.pull_request.user.login == 'dependabot[bot]'"
+    # Same grants scrutineer.yml gives it; review.yml inherits exactly this set.
+    permissions:
+      contents: 'read'
+      issues: 'write'
+      checks: 'read'
+      pull-requests: 'write'
+    # SHA-pinned, not @v1. The justification for pull_request_target above is that
+    # review.yml executes nothing from the pull request, and a tag can be
+    # re-pointed. A SHA cannot move under us. Who bumps it depends on how this
+    # repo's scrutineer.yml calls Scrutineer:
+    # - scrutineer.yml@v1: dependabot.yml ignores `jonespr1/scrutineer*` (to
+    #   protect the moving tag), which also covers this dependency-name, so the
+    #   bump is a MANUAL edit. Don't remove the ignore to "fix" that.
+    # - scrutineer.yml pinned to a SHA: don't ignore it; Dependabot bumps both
+    #   pins in one PR.
+    # Either way, whoever bumps or reviews the bump re-reads review.yml at the
+    # new SHA and re-verifies the "executes nothing" claim. Verified at this SHA
+    # (v1.7.0): one actions/checkout with persist-credentials:false and no ref,
+    # and one bash step that reads the diff through `gh api`. No build, install
+    # or test of PR content.
+    uses: 'jonespr1/scrutineer/.github/workflows/review.yml@a53832fe300d7044b932cf4a51ca1d16747efb7a' # v1.7.0
+    secrets:
+      GEMINI_API_KEY: '${{ secrets.GEMINI_API_KEY }}'
+      OPENROUTER_API_KEY: '${{ secrets.OPENROUTER_API_KEY }}'
