@@ -431,8 +431,7 @@ jobs:
             # A cap that lands inside the first file's header (after its "diff --git" line, before
             # any "@@" hunk) leaves a header with no changes in it: also not a reviewable payload.
             case "$DIFF" in
-              *$'
-@@'*) ;;
+              *$'\n@@'*) ;;
               *)         DIFF="" ;;
             esac
             TRUNC_NOTE="$(printf '\n\n> Note: diff truncated at a line boundary; only the first part was reviewed.')"

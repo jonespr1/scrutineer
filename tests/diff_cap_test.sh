@@ -241,11 +241,11 @@ case "$got" in 0\|*'DIFF_MAX_CHARS truncated the diff to nothing'*)
   *) fail "a cap cutting mid-first-line reached the model with a garbage fragment (got=$got)" ;; esac
 # Cap lands after the header line but before any hunk: header-only payload must also be emptied.
 got="$(run_exit '40' "$realdiff")"
-case "$got" in 0|*'DIFF_MAX_CHARS truncated the diff to nothing'*) ok 'a cap inside the file header (before any hunk) empties the diff' ;;
+case "$got" in 0\|*'DIFF_MAX_CHARS truncated the diff to nothing'*) ok 'a cap inside the file header (before any hunk) empties the diff' ;;
   *) fail "header-only payload reached the model (got=$got)" ;; esac
 # A failing gh (e.g. no pull-requests: write) must not turn the guard into a failed step.
 got="$(GHFAIL=1 run_exit '20' "$realdiff")"
-case "$got" in 0|*) ok 'a failing gh pr comment still exits 0' ;; *) fail "gh failure broke the guard (got=$got)" ;; esac
+case "$got" in 0\|*) ok 'a failing gh pr comment still exits 0' ;; *) fail "gh failure broke the guard (got=$got)" ;; esac
 # The PR author must SEE this: the guard posts a PR comment naming the variable and its value.
 case "$got" in *'GH_CALL pr comment 7 --repo o/r'*'No review was produced'*'currently 20 characters'*)
     ok 'the empty-after-cap guard posts a visible PR comment naming DIFF_MAX_CHARS and its value' ;;
