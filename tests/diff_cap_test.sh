@@ -258,5 +258,36 @@ case "$got" in *'GH_CALL pr comment 7 --repo o/r'*'No review was produced'*'curr
     ok 'the empty-after-cap guard posts a visible PR comment naming DIFF_MAX_CHARS and its value' ;;
   *) fail "no visible PR comment from the empty-after-cap guard (got=$got)" ;; esac
 
+# --- cap_advice(): the small-prompt message derives its figures from the configured cap -------
+# glm asked for this to be pinned: before it, a regression that reprinted ${MAX:-200000} as a
+# token count, or changed the / 4 to / 3, would not fail any suite (routing_test.sh only asserts
+# substrings that survived the rewording). cap_advice is extracted verbatim, like the block above.
+# It shells out to jq to read prompt_tokens, so a stub jq stands in for it: that keeps this test
+# runnable where jq is absent, and the value read is not what is under test - the derived text is.
+ASRC="$(awk '/^          cap_advice\(\) \{$/,/^          \}$/' "$WF" | sed 's/^          //')"
+[ -n "$ASRC" ]                              || bad "no cap_advice function"
+printf '%s\n' "$ASRC" | bash -n 2>/dev/null || bad "cap_advice is not valid bash"
+small_prompt_advice() { # $1 = MAX (empty = unset), $2 = CONTEXT_BUDGET (empty = unset)
+  MAXV="$1" CBV="$2" ASRC_="$ASRC" bash -c '
+    jq() { cat >/dev/null; echo 5000; }   # stub: prompt_tokens=5000, under the 20000 small-prompt line
+    resp="{}"; MT=""; el=1; timeout=600
+    [ -n "$MAXV" ] && MAX="$MAXV"
+    [ -n "$CBV" ] && CONTEXT_BUDGET="$CBV"
+    eval "$ASRC_"
+    cap_advice' 2>/dev/null
+}
+got="$(small_prompt_advice '' '')"
+case "$got" in *'against a ceiling of roughly 200000 tokens (~800000 characters'*)
+    ok 'cap_advice at defaults: ceiling is roughly 200000 tokens (~800000 characters)' ;;
+  *) fail "cap_advice default figures wrong (got=$got)" ;; esac
+got="$(small_prompt_advice '500000' '')"
+case "$got" in *'against a ceiling of roughly 275000 tokens (~1100000 characters'*)
+    ok 'cap_advice with DIFF_MAX_CHARS=500000: ceiling is roughly 275000 tokens (~1100000 characters)' ;;
+  *) fail "cap_advice figures do not follow DIFF_MAX_CHARS (got=$got)" ;; esac
+got="$(small_prompt_advice '500000' '100000')"
+case "$got" in *'against a ceiling of roughly 150000 tokens (~600000 characters'*)
+    ok 'cap_advice with CONTEXT_BUDGET=100000: figures follow CONTEXT_BUDGET too' ;;
+  *) fail "cap_advice figures do not follow CONTEXT_BUDGET (got=$got)" ;; esac
+
 [ "$fails" -eq 0 ] && echo "All diff-cap tests passed." || echo "Some diff-cap tests FAILED." >&2
 exit "$fails"
