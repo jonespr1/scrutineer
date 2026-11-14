@@ -61,6 +61,58 @@ eq "own_review_sha: a failure notice is not a review" "$(own_review_sha glm)" "$
 COMMENTS_JSON="$(thread "$(review glm "$H" "⚠️ Could not generate review.")")"
 lacks "slot_context: a retry after a failure is not told that it reviewed this commit" "$(slot_context glm)" "CHANGED SINCE"
 
+# A real review that QUOTES the notice (a review of this workflow does) is still a review.
+COMMENTS_JSON="$(thread "$(review glm "$A")" "$(review glm "$B" 'The filter contains("⚠️ Could not generate review") is too wide.')")"
+eq "own_review_sha: a review that quotes the failure notice is still a review" "$(own_review_sha glm)" "$B"
+# A bot comment with this slot's header and no marker is passed over; it does not hide the reviews before it.
+COMMENTS_JSON="$(thread "$(review glm "$A")" "$(jq -n --arg b '## 🤖 Review - `glm`
+
+no marker here' '$b' -r)")"
+eq "own_review_sha: a headed comment with no marker does not hide an earlier review" "$(own_review_sha glm)" "$A"
+
+# --- The history cut: newest 20000 characters, starting at a whole entry. ---
+CUT_SRC="$(awk '/^          if \[ "\$\{#HISTORY\}" -gt 20000 \]; then$/, /^          fi$/' "$WF" | sed 's/^          //')"
+[ -n "$CUT_SRC" ] && printf '%s\n' "$CUT_SRC" | bash -n 2>/dev/null || { echo "FAIL  bad extraction of the history cut from $WF"; exit 1; }
+pad() { head -c "$1" /dev/zero | tr '\0' 'x'; }
+HISTORY="### Previous review (its first line names the reviewer: you or another one):
+$(pad 15000)
+
+---
+
+### Developer response (someone):
+$(pad 9000)
+
+---
+
+### Previous review (its first line names the reviewer: you or another one):
+LAST"
+eval "$CUT_SRC"
+eq "history cut: the result starts at a whole entry" "$(printf '%s' "$HISTORY" | head -1)" "### Developer response (someone):"
+contains "history cut: the newest entry is kept" "$HISTORY" "LAST"
+HISTORY="### Previous review (its first line names the reviewer: you or another one):
+$(pad 30000)"
+eval "$CUT_SRC"
+eq "history cut: one entry longer than the window keeps the raw cut" "${#HISTORY}" "20000"
+HISTORY="### Developer response (someone):
+$(pad 15000)
+
+---
+
+### Previous review (its first line names the reviewer: you or another one):
+$(pad 9000)
+
+---
+
+### Developer response (someone):
+LAST"
+eval "$CUT_SRC"
+eq "history cut: a review entry is a whole entry too" "$(printf '%s' "$HISTORY" | head -1)" "### Previous review (its first line names the reviewer: you or another one):"
+HISTORY="short"
+eval "$CUT_SRC"
+eq "history cut: a short history is not touched" "$HISTORY" "short"
+# The cut finds an entry by the two labels that the history builder writes. If a label changes, the cut must change too.
+grep -qF '"### Previous review (' "$WF" && grep -qF '"### Developer response (' "$WF" || { echo "FAIL  the history labels changed; the cut pattern depends on them"; fail=1; }
+
 # gh is replaced, so the test needs no network: it records the call and returns $GH_OUT.
 gh() { GH_CALL="$*"; echo "$*" > "$CALLS"; [ -n "${GH_OUT:-}" ] && printf '%s\n' "$GH_OUT"; return "${GH_RC:-0}"; }
 CALLS="$(mktemp)"
