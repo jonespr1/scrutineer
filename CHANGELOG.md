@@ -7,6 +7,22 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
 
 ## v1.8.0 (pending)
 
+### Changed
+- **The reviewer prompt now lets a review loop end.** On a small tooling PR the loop ran nine
+  rounds, because each round one reviewer found a new Low in code that had not changed. The
+  prompt changes are central, so no consumer repo has to act:
+  - **No style findings.** Naming, formatting, wording and "a cleaner way" are out, unless the
+    repo's own \`.review/styleguide.md\` has the rule. A finding must name what goes wrong.
+  - **A verdict line.** Each review ends with \`**Verdict:** BLOCKING\` (any Critical, High or
+    Medium, or anything still open) or \`**Verdict:** NOT BLOCKING\` (Low only, or nothing). An
+    author can stop when every reviewer says NOT BLOCKING, and judge the Lows once.
+  - **A re-review is about what changed.** On code that has not changed since the previous
+    round, a reviewer raises a new finding only when it is Critical or High.
+  - **Reviewers do not repeat each other.** The prior conversation always held every reviewer's
+    reviews, but labelled all of them "Your previous review". The label now says that the first
+    line names the reviewer, and the prompt says not to raise again what another one raised.
+  Pinned by \`tests/prompt_test.sh\`. The effect on real reviews is not measured yet.
+
 ### Added
 - **`DIFF_MAX_CHARS` repo Variable makes the diff size cap configurable.** It was a hardcoded
   200,000-character literal; a genuinely large, honest PR (not one padded by a generated file -

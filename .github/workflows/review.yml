@@ -508,7 +508,7 @@ jobs:
               def body: .body // "";
               map(select((body | startswith("## 🤖 Review")) or (.user.type == "User")))
               | map(if (body | startswith("## 🤖 Review"))
-                    then "### Your previous review:\n" + body
+                    then "### Previous review (its first line names the reviewer: you or another one):\n" + body
                     else "### Developer response (" + (.user.login // "unknown") + "):\n" + body end)
               | join("\n\n---\n\n")' 2>/dev/null || true)"
           if [ "${#HISTORY}" -gt 20000 ]; then HISTORY="${HISTORY: -20000}"; fi
@@ -537,6 +537,15 @@ jobs:
             'surrounding code does not already handle it - do not invent problems. Reserve 🔴 Critical for a' \
             'demonstrable crash, data loss or security hole. If the change is trivial or looks good, say so plainly.' \
             '' \
+            'Do NOT report style: naming, formatting, wording, comment tone, code layout or a different way to' \
+            'write code that already works. The one exception is a rule in the team style guide below, when one' \
+            'is given. A finding must name what goes wrong for a user, an operator or the next change; "cleaner"' \
+            'and "more consistent" are not failures.' \
+            '' \
+            'End the review with one line, exactly in this form, so that the author knows whether to go round again:' \
+            '**Verdict:** BLOCKING - when you list any 🔴 Critical, 🟠 High or 🟡 Medium finding, or anything under Still open.' \
+            '**Verdict:** NOT BLOCKING - when you list only 🟢 Low findings, or none.' \
+            '' \
             'Do NOT claim a file, asset, import, symbol or route is missing without checking the repository file' \
             'list provided below: a path being absent from the diff does not mean it is absent from the repo.' \
             'Calibrate severity against the CI status provided below. If CI is passing, do not raise 🔴 Critical or' \
@@ -548,7 +557,9 @@ jobs:
             'If a PRIOR CONVERSATION section appears below, this is a RE-REVIEW. Treat it as a continuing two-way conversation:' \
             '- Begin with a "## 🔄 Since last review" section: ✅ Resolved (now fixed), 🤝 Acknowledged (the developer gave a sound reason not to change something and you agree - do not raise it again), ⚠️ Still open.' \
             '- Do NOT repeat resolved or acknowledged items under Findings; only include new or still-unresolved issues.' \
-            '- If you disagree with a developer response, keep it open and briefly explain why. Change your mind when the reasoning is sound.')"
+            '- If you disagree with a developer response, keep it open and briefly explain why. Change your mind when the reasoning is sound.' \
+            '- The prior conversation holds the reviews of every reviewer on this PR, not only yours. The first line of each review names its model. Do NOT raise an issue that another reviewer already raised there; if it is still open, list it once under Still open with the words "also raised by" and that name.' \
+            '- A re-review is about what changed. Review the code that changed since the previous round in full. For code that has NOT changed since then, raise a new finding only when it is 🔴 Critical or 🟠 High. A new 🟡 Medium or 🟢 Low finding on unchanged code belonged in the first review; leave it out, so that the review can end.')"
           PROMPT="${INSTRUCTIONS}
 
           ${REREVIEW}"
