@@ -970,7 +970,9 @@ jobs:
           # filtered "@review glm" or a failed call leaves one slot a round behind the others.
           slot_context() {
             local label="$1" prev files
-            printf 'You are the reviewer `%s`. A previous review is yours only when its first line is "## 🤖 Review - `%s`"; every other review comes from another reviewer.\n' "$label" "$label"
+            # The header itself is NOT quoted here. When it was, two of six reviews in the first
+            # live test wrote it out as their own first line, under the one post_review adds.
+            printf 'You are the reviewer named `%s`. In the prior conversation, a review is yours only when its first line names `%s`; every other review comes from another reviewer. Start your review at the Summary section: the header line with your name is added for you.\n' "$label" "$label"
             prev="$(own_review_sha "$label")"
             [ -z "$prev" ] && return 0
             if [ "$prev" = "${HEAD_SHA:-}" ]; then

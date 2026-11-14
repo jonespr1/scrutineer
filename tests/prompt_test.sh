@@ -61,7 +61,8 @@ CALLS="$(mktemp)"
 
 COMMENTS_JSON='[]'; : > "$CALLS"
 out="$(slot_context glm)"
-contains "slot_context: names the reviewer" "$out" 'You are the reviewer `glm`'
+contains "slot_context: names the reviewer" "$out" 'You are the reviewer named `glm`'
+lacks    "slot_context: does not show the header for the model to copy" "$out" '## 🤖 Review'
 lacks    "slot_context: a first review has no changed-files line" "$out" "CHANGED SINCE"
 eq       "slot_context: a first review makes no API call" "$(cat "$CALLS")" ""
 
