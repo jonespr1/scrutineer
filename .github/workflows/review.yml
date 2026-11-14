@@ -560,6 +560,8 @@ jobs:
             'error, or failed migration on a path CI exercises) unless you can say why CI would miss it - an' \
             'untested path, a security or data-loss issue, or a runtime/environment-only condition. When unsure,' \
             'lower the severity or frame it as a question rather than asserting Critical.')"
+          # Two rules below point at "the top of this prompt". That text is not in PROMPT as built
+          # here: run_slot puts slot_context() in front of it, once for each slot.
           REREVIEW="$(printf '%s\n' \
             'If a PRIOR CONVERSATION section appears below, this is a RE-REVIEW. Treat it as a continuing two-way conversation:' \
             '- Begin with a "## 🔄 Since last review" section: ✅ Resolved (now fixed), 🤝 Acknowledged (the developer gave a sound reason not to change something and you agree - do not raise it again), ⚠️ Still open.' \
@@ -949,13 +951,16 @@ jobs:
                 end' >/dev/null 2>&1
           }
 
-          # The commit of this slot's newest posted review, or nothing. Anchored the same way as
+          # The commit of this slot's newest posted review, or nothing. A failure notice ("Could
+          # not generate review") carries a header and a marker too, but it reviewed nothing, so
+          # it is left out here exactly as in already_reviewed(): counted, it would tell a retry
+          # that the code is unchanged since a review that never happened. Anchored the same way as
           # already_reviewed(): the header is the FIRST line and the marker is the LAST, so a
           # review that another model quoted back is never taken for this slot's own.
           own_review_sha() {
             printf '%s' "$COMMENTS_JSON" | jq -r --arg head "## 🤖 Review - \`$1\`" '
               def body: .body // "";
-              [ .[] | select(.user.type=="Bot")
+              [ .[] | select(.user.type=="Bot" and ((body|contains("⚠️ Could not generate review"))|not))
                 | (body | split("\n") | map(rtrimstr("\r"))) as $lines
                 | select((($lines | first) // "") == $head)
                 | (($lines | map(select(. != "")) | last) // "")
@@ -979,8 +984,10 @@ jobs:
               printf 'CHANGED SINCE YOUR PREVIOUS REVIEW: no code. You reviewed this same commit (%s) before; only the conversation is new.\n' "${prev:0:7}"
               return 0
             fi
-            files="$(gh api "repos/${REPO}/compare/${prev}...${HEAD_SHA}" --jq '.files[].filename' 2>/dev/null | head -300 || true)"
-            if [ -n "$files" ]; then
+            files="$(gh api "repos/${REPO}/compare/${prev}...${HEAD_SHA}" --jq '.files[].filename' 2>/dev/null || true)"
+            # The compare API returns at most 300 files. A full page may be a cut list, and a
+            # file missing from a cut list would be called unchanged, so a full page is "not known".
+            if [ -n "$files" ] && [ "$(printf '%s\n' "$files" | wc -l)" -lt 300 ]; then
               printf 'CHANGED SINCE YOUR PREVIOUS REVIEW (commit %s), by file. Every file that is not in this list is unchanged code:\n%s\n' "${prev:0:7}" "$files"
             else
               # A rebase or force-push can leave the old commit with nothing to compare against.

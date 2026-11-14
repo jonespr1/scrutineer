@@ -15,8 +15,8 @@ fail=0
 block() { awk -v start="^          $1=\"\\\\$\\\\(printf" '$0 ~ start { f = 1 } f { print } f && /\)"$/ { exit }' "$WF"; }
 INSTRUCTIONS_SRC="$(block INSTRUCTIONS)"
 REREVIEW_SRC="$(block REREVIEW)"
-[ -n "$INSTRUCTIONS_SRC" ] || { echo "FAIL  bad extraction of the INSTRUCTIONS block"; exit 1; }
-[ -n "$REREVIEW_SRC" ]     || { echo "FAIL  bad extraction of the REREVIEW block"; exit 1; }
+[ -n "$INSTRUCTIONS_SRC" ] || { echo "FAIL  bad extraction of the INSTRUCTIONS block from $WF (did its first line or its indent change?)"; exit 1; }
+[ -n "$REREVIEW_SRC" ]     || { echo "FAIL  bad extraction of the REREVIEW block from $WF (did its first line or its indent change?)"; exit 1; }
 
 has() { printf '%s' "$1" | grep -qF -- "$2" || { echo "FAIL  prompt lost: $3"; fail=1; }; }
 has "$INSTRUCTIONS_SRC" "Do NOT report style" "the no-style rule"
@@ -55,6 +55,12 @@ eq "own_review_sha: a slot with no review has none" "$(own_review_sha minimax)" 
 COMMENTS_JSON="$(thread "$(review gemini "$B" "$(review glm "$A")")")"
 eq "own_review_sha: a quoted review is not this slot's own" "$(own_review_sha glm)" ""
 
+# A failed call posts a notice with this slot's header and a marker. It reviewed nothing.
+COMMENTS_JSON="$(thread "$(review glm "$A")" "$(review glm "$B" "⚠️ Could not generate review.")")"
+eq "own_review_sha: a failure notice is not a review" "$(own_review_sha glm)" "$A"
+COMMENTS_JSON="$(thread "$(review glm "$H" "⚠️ Could not generate review.")")"
+lacks "slot_context: a retry after a failure is not told that it reviewed this commit" "$(slot_context glm)" "CHANGED SINCE"
+
 # gh is replaced, so the test needs no network: it records the call and returns $GH_OUT.
 gh() { GH_CALL="$*"; echo "$*" > "$CALLS"; [ -n "${GH_OUT:-}" ] && printf '%s\n' "$GH_OUT"; return "${GH_RC:-0}"; }
 CALLS="$(mktemp)"
@@ -73,6 +79,12 @@ contains "slot_context: lists the changed files" "$out" $'aaaaaaa), by file. Eve
 
 out="$(GH_OUT='' GH_RC=1 slot_context glm)"
 contains "slot_context: a failed comparison says so and does not narrow the review" "$out" "not known"
+
+out="$(GH_OUT="$(seq -f "f%g.ts" 300)" slot_context glm)"
+contains "slot_context: a full page of 300 files may be cut, so it is not known" "$out" "not known"
+lacks    "slot_context: a full page is not presented as the list" "$out" "f1.ts"
+out="$(GH_OUT="$(seq -f "f%g.ts" 299)" slot_context glm)"
+contains "slot_context: 299 files are listed" "$out" "f299.ts"
 
 COMMENTS_JSON="$(thread "$(review glm "$H")")"; : > "$CALLS"
 out="$(slot_context glm)"
