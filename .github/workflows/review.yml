@@ -511,7 +511,14 @@ jobs:
                     then "### Previous review (its first line names the reviewer: you or another one):\n" + body
                     else "### Developer response (" + (.user.login // "unknown") + "):\n" + body end)
               | join("\n\n---\n\n")' 2>/dev/null || true)"
-          if [ "${#HISTORY}" -gt 20000 ]; then HISTORY="${HISTORY: -20000}"; fi
+          # Keep the newest 20000 characters, then drop the part-entry that the cut leaves at the
+          # top: the reviewer tells its own reviews from the others by each entry's first line, and
+          # a fragment has none. If one entry alone is longer than the window, keep the raw cut.
+          if [ "${#HISTORY}" -gt 20000 ]; then
+            HISTORY="${HISTORY: -20000}"
+            WHOLE="$(printf '%s\n' "$HISTORY" | awk 'f || /^### (Previous review|Developer response) \(/ { f = 1; print }')"
+            [ -n "$WHOLE" ] && HISTORY="$WHOLE"
+          fi
 
           # 4) Build the prompt.
           INSTRUCTIONS="$(printf '%s\n' \
@@ -558,8 +565,8 @@ jobs:
             '- Begin with a "## 🔄 Since last review" section: ✅ Resolved (now fixed), 🤝 Acknowledged (the developer gave a sound reason not to change something and you agree - do not raise it again), ⚠️ Still open.' \
             '- Do NOT repeat resolved or acknowledged items under Findings; only include new or still-unresolved issues.' \
             '- If you disagree with a developer response, keep it open and briefly explain why. Change your mind when the reasoning is sound.' \
-            '- The prior conversation holds the reviews of every reviewer on this PR, not only yours. The first line of each review names its model. Do NOT raise an issue that another reviewer already raised there; if it is still open, list it once under Still open with the words "also raised by" and that name.' \
-            '- A re-review is about what changed. Review the code that changed since the previous round in full. For code that has NOT changed since then, raise a new finding only when it is 🔴 Critical or 🟠 High. A new 🟡 Medium or 🟢 Low finding on unchanged code belonged in the first review; leave it out, so that the review can end.')"
+            '- The prior conversation holds the reviews of every reviewer on this PR, not only yours. The first line of each review names its model, and the first line of this prompt names you. Do NOT raise an issue that another reviewer already raised there; if it is still open, list it once under Still open with the words "also raised by" and that name.' \
+            '- A re-review is about what changed. The line CHANGED SINCE YOUR PREVIOUS REVIEW at the top of this prompt lists the files that changed; review those in full. For a file that is NOT in that list, raise a new finding only when it is 🔴 Critical or 🟠 High. A new 🟡 Medium or 🟢 Low finding on unchanged code belonged in the first review; leave it out, so that the review can end. When that line is absent or says "not known", treat all code as changed.')"
           PROMPT="${INSTRUCTIONS}
 
           ${REREVIEW}"
@@ -572,7 +579,7 @@ jobs:
           if [ -n "$HISTORY" ]; then
             PROMPT="${PROMPT}
 
-          PRIOR CONVERSATION (your earlier reviews and the developer's responses, oldest first):
+          PRIOR CONVERSATION (the earlier reviews of every reviewer and the developer's responses, oldest first):
           ${HISTORY}"
           fi
           PROMPT="${PROMPT}
@@ -942,6 +949,43 @@ jobs:
                 end' >/dev/null 2>&1
           }
 
+          # The commit of this slot's newest posted review, or nothing. Anchored the same way as
+          # already_reviewed(): the header is the FIRST line and the marker is the LAST, so a
+          # review that another model quoted back is never taken for this slot's own.
+          own_review_sha() {
+            printf '%s' "$COMMENTS_JSON" | jq -r --arg head "## 🤖 Review - \`$1\`" '
+              def body: .body // "";
+              [ .[] | select(.user.type=="Bot")
+                | (body | split("\n") | map(rtrimstr("\r"))) as $lines
+                | select((($lines | first) // "") == $head)
+                | (($lines | map(select(. != "")) | last) // "")
+                | capture("^<!-- scrutineer sha=(?<s>[0-9a-f]{40}) ") | .s ] | last // empty' 2>/dev/null || true
+          }
+
+          # What only one slot can be told: which reviewer it is, and what changed since ITS last
+          # review. PROMPT is built once for all slots, and a model does not reliably know its own
+          # name, so without this the two re-review rules (no repeats between reviewers; only
+          # Critical and High on unchanged code) ask for something the prompt does not contain.
+          # The comparison is per slot because slots do not always review the same commits: a
+          # filtered "@review glm" or a failed call leaves one slot a round behind the others.
+          slot_context() {
+            local label="$1" prev files
+            printf 'You are the reviewer `%s`. A previous review is yours only when its first line is "## 🤖 Review - `%s`"; every other review comes from another reviewer.\n' "$label" "$label"
+            prev="$(own_review_sha "$label")"
+            [ -z "$prev" ] && return 0
+            if [ "$prev" = "${HEAD_SHA:-}" ]; then
+              printf 'CHANGED SINCE YOUR PREVIOUS REVIEW: no code. You reviewed this same commit (%s) before; only the conversation is new.\n' "${prev:0:7}"
+              return 0
+            fi
+            files="$(gh api "repos/${REPO}/compare/${prev}...${HEAD_SHA}" --jq '.files[].filename' 2>/dev/null | head -300 || true)"
+            if [ -n "$files" ]; then
+              printf 'CHANGED SINCE YOUR PREVIOUS REVIEW (commit %s), by file. Every file that is not in this list is unchanged code:\n%s\n' "${prev:0:7}" "$files"
+            else
+              # A rebase or force-push can leave the old commit with nothing to compare against.
+              printf 'CHANGED SINCE YOUR PREVIOUS REVIEW: not known (no comparison with commit %s is available). Treat all code as changed.\n' "${prev:0:7}"
+            fi
+          }
+
           # A single reviewer slot: direct Gemini, or an OpenRouter model id.
           run_slot() {
             local spec="$1" model label text
@@ -962,6 +1006,9 @@ jobs:
               return 0
             fi
             echo "Reviewer: $label"
+            # Each slot runs in its own background subshell (see the loop at the end), so this
+            # changes the prompt for this slot only.
+            PROMPT="$(slot_context "$label")"$'\n\n'"${PROMPT}"
             # Time the call and collect the slot's telemetry via a temp file (subshell-safe).
             local SLOT_META t0 t1 lat pt=0 ct=0 cost=na host=na
             SLOT_META="$(mktemp)"; export SLOT_META; t0=$SECONDS
