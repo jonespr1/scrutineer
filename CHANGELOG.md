@@ -5,6 +5,17 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## v1.8.1 (unreleased)
+
+### Fixed
+- **A review that quotes the failure notice now counts as a review.** `already_reviewed()` left
+  out any comment whose body contained `⚠️ Could not generate review` anywhere. A genuine review
+  of a PR that changes `review.yml` quotes that string, so it was not counted, and a plain
+  `@review` on the same commit ran the slot again: one paid review wasted. The notice is now
+  known by its place, the first line of text under the header, the same test `own_review_sha()`
+  has used since #36. A real failure notice is still not counted. Pinned by
+  `tests/dedupe_test.sh`. Closes #37.
+
 ## v1.8.0 (pending)
 
 ### Changed

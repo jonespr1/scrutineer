@@ -927,8 +927,11 @@ jobs:
             # quote another reviewer's comment back verbatim - marker included - so a
             # contains() match would credit that reviewer with a review it never ran and
             # silently skip it on this commit. Anchoring makes a quoted header or marker inert.
-            # (The "could not generate" test stays a contains(): a quoted failure notice at
-            # worst re-runs a review, which is the safe direction to fail.)
+            # A failure notice ("Could not generate review") is not a review, but it is known by
+            # its PLACE, not by a search of the whole body: it is the first line of text under
+            # the header. A real review of this very file quotes that string further down, and a
+            # contains() match would drop it, so a plain @review on the same commit would run
+            # the slot again (one paid review). own_review_sha() below uses the same test.
             # Every .body is read through `// ""`: the API can hand back a null body (and jq
             # errors on null for both split and contains). A single null anywhere in the thread
             # would abort the whole filter, and since jq's failure is swallowed below the slot
@@ -941,9 +944,12 @@ jobs:
                 | (($lines | first) // "") == $h
                 and ((($lines | map(select(. != "")) | last) // "")
                      | startswith("<!-- scrutineer sha=" + $s));
+              def failure_notice:
+                ((body | split("\n") | map(rtrimstr("\r")) | map(select(. != ""))) as $text
+                 | ($text[1] // "") | startswith("⚠️ Could not generate review"));
               (map(select(.user.type=="Bot"
                           and own_review($head; $sha)
-                          and ((body|contains("⚠️ Could not generate review"))|not))) | last) as $a
+                          and (failure_notice|not))) | last) as $a
               | if $a==null then false
                 else ([ .[] | select(.user.type=="User"
                           and (.created_at > $a.created_at)
@@ -956,7 +962,9 @@ jobs:
           # it is left out here exactly as in already_reviewed(): counted, it would tell a retry
           # that the code is unchanged since a review that never happened. The notice is known by
           # its PLACE (the first line of text under the header), not by a search of the whole
-          # body: a real review of this very file quotes that string. Anchored the same way as
+          # body: a real review of this very file quotes that string. already_reviewed() applies
+          # the same by-place test (its failure_notice), so the two agree on what a notice is.
+          # Anchored the same way as
           # already_reviewed(): the header is the FIRST line and the marker is the LAST, so a
           # review that another model quoted back is never taken for this slot's own.
           own_review_sha() {
