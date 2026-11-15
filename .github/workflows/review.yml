@@ -964,9 +964,9 @@ jobs:
           # its PLACE (the first line of text under the header), not by a search of the whole
           # body: a real review of this very file quotes that string. already_reviewed() applies
           # the same by-place test (its failure_notice), so the two agree on what a notice is.
-          # Anchored the same way as
-          # already_reviewed(): the header is the FIRST line and the marker is the LAST, so a
-          # review that another model quoted back is never taken for this slot's own.
+          # Anchored the same way as already_reviewed(): the header is the FIRST line and the
+          # marker is the LAST, so a review that another model quoted back is never taken for
+          # this slot's own.
           own_review_sha() {
             printf '%s' "$COMMENTS_JSON" | jq -r --arg head "## 🤖 Review - \`$1\`" '
               def body: .body // "";
