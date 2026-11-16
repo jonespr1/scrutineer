@@ -91,6 +91,17 @@ check 'failed review is not treated as reviewed' no 'gemini-flash-latest' \
               '⚠️ Could not generate review.' '' \
               "<!-- scrutineer sha=$SHA lat=300s in=0 out=0 cost=na -->")")"
 
+# A failure notice is known by its PLACE (the first line of text under the header), not by a
+# search of the whole body. A genuine review of review.yml quotes the notice further down; it is
+# still a review, so the slot is skipped on the same commit.
+check 'genuine review that quotes the failure notice is still a review' yes 'gemini-flash-latest' \
+      "$(mk "$(printf '%s\n' '## 🤖 Review - `gemini-flash-latest`' '' \
+              '## Summary' '' 'The workflow posts "⚠️ Could not generate review" when a call fails.' '' \
+              "<!-- scrutineer sha=$SHA lat=1s in=1 out=1 cost=na -->")")"
+# CRLF line endings must not hide a real failure notice.
+check 'failure notice with CRLF line endings is not a review' no 'gemini-flash-latest' \
+      "$(mk "$(printf '## 🤖 Review - `gemini-flash-latest`\r\n\r\n⚠️ Could not generate review.\r\n\r\n<!-- scrutineer sha=%s lat=300s in=0 out=0 cost=na -->\r\n' "$SHA")")"
+
 # Developer activity after the review re-opens it; a bare "@review" does not.
 AFTER='[{"user":{"type":"Bot"},"created_at":"2026-07-30T17:00:00Z","body":"BODY"},
         {"user":{"type":"User"},"created_at":"2026-07-30T17:05:00Z","body":"COMMENT"}]'
