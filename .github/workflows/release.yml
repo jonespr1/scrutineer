@@ -20,8 +20,7 @@ on:
       # them below never re-triggers this workflow -- no loop.
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
-permissions:
-  contents: 'write'   # needed to create/update the major-alias tag ref
+permissions: {}   # nothing by default; each job grants only what it needs
 
 # Two tags pushed close together (v1.4.2 then v1.4.3) would otherwise race, both PATCHing
 # refs/tags/v1, and the alias could settle on the OLDER release. Serialise instead: with
@@ -33,6 +32,8 @@ concurrency:
 
 jobs:
   move-major-alias:
+    permissions:
+      contents: 'write'   # needed to create/update the major-alias tag ref
     runs-on: 'ubuntu-latest'
     steps:
       - name: 'Point the major alias at this release'

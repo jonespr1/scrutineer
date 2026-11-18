@@ -24,8 +24,7 @@ on:
         required: false
         default: '1'
 
-permissions:
-  contents: 'write'   # to commit results back to the branch
+permissions: {}   # nothing by default; each job grants only what it needs
 
 concurrency:
   group: 'scrutineer-benchmark'
@@ -33,6 +32,8 @@ concurrency:
 
 jobs:
   benchmark:
+    permissions:
+      contents: 'write'   # to commit results back to the branch
     runs-on: 'ubuntu-latest'
     timeout-minutes: 30
     steps:
