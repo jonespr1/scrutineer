@@ -110,6 +110,7 @@ unless noted.
 | `OPENROUTER_ZDR` | `true` | Zero-data-retention hosts only (on by default). Set `false` to allow non-ZDR hosts |
 | `CONTEXT_BUDGET` | `600000` | Max characters of full changed-file content sent alongside the diff. Both Gemini and GLM have ~1M-token context, so this is a cost/latency guard rather than a context limit; the default fits every changed file in a normal PR. Raise or lower to taste |
 | `DIFF_MAX_CHARS` | `200000` | Character cap on the diff sent for review, truncated at a line boundary. A malformed, non-positive or over-15-digit value falls back to the default with a warning. A cap smaller than the diff's first line posts a "no review was produced" comment instead of reviewing nothing. Raising it is rarely the right fix: use `DIFF_EXCLUDE` or split the PR |
+| `CI_RUNNER` | *(unset - `ubuntu-latest`)* | Label of a self-hosted runner to run the review on, e.g. `pc-docker`, to take the minutes off GitHub's bill. Obeyed only when the repo is **private**; a public repo always gets `ubuntu-latest`, so a fork's pull request never runs on your machine. The runner needs `gh`, `jq`, `curl`, `base64` and `iconv`; the review fails loudly if one is missing |
 | `GEMINI_API_KEY` | - | **Secret** for direct Gemini slots |
 | `OPENROUTER_API_KEY` | - | **Secret** for OpenRouter slots |
 

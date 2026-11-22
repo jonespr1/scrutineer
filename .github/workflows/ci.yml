@@ -80,6 +80,8 @@ jobs:
         run: bash tests/head_sha_test.sh
       - name: 'Diff fetch (fetch_diff extraction + set -e-safe call sites)'
         run: bash tests/fetch_diff_test.sh
+      - name: 'Runner (runs-on variable and its ubuntu-latest fallback)'
+        run: bash tests/runner_test.sh
 
   lint:
     name: Lint · actionlint · PSScriptAnalyzer
