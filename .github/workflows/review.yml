@@ -109,10 +109,11 @@ jobs:
     # Where the review runs. Unset, it is GitHub-hosted ubuntu-latest, as before. A PRIVATE caller
     # repo can set the repository variable CI_RUNNER to the label of its own self-hosted runner
     # (for example "pc-docker") to take the review minutes off GitHub's bill. In a called workflow
-    # the vars context is the CALLER's, so each consumer repo opts in for itself and this repo's
-    # own runs are unaffected. Never set CI_RUNNER on a public repo: a fork's pull request would
-    # then start a job on that machine. tests/runner_test.sh pins the fallback.
-    runs-on: "${{ vars.CI_RUNNER || 'ubuntu-latest' }}"
+    # the vars and github contexts are the CALLER's, so each consumer repo opts in for itself and
+    # this repo's own runs are unaffected. On a PUBLIC caller the variable is ignored, not obeyed:
+    # a fork's pull request must never start a job on someone's own machine, and ignoring it keeps
+    # the review running (on ubuntu-latest) rather than skipping it. tests/runner_test.sh pins this.
+    runs-on: "${{ (github.event.repository.private && vars.CI_RUNNER) || 'ubuntu-latest' }}"
     # Reviewers run in parallel, so wall-clock is the slowest single model call (per-call
     # ceilings are 600s OpenRouter / 240s Gemini) plus checkout - ~11 min worst case. The job
     # ceiling must stay comfortably above the per-call one or it, not curl, becomes the limit.
@@ -156,6 +157,14 @@ jobs:
           HEAD_SHA: '${{ github.event.pull_request.head.sha }}'
         run: |
           set -euo pipefail
+
+          # Preflight: the tools this script needs. ubuntu-latest has them all; a self-hosted runner
+          # (CI_RUNNER) may not. Fail loudly here, because jq missing would not fail anywhere else:
+          # the de-dupe's jq calls swallow errors, so already_reviewed() would never skip and every
+          # "@review" on an unchanged commit would spend a paid round.
+          for tool in gh jq curl; do
+            command -v "$tool" >/dev/null 2>&1 || { echo "::error::This runner has no '$tool', which Scrutineer needs. Install it on the runner, or unset CI_RUNNER to use ubuntu-latest."; exit 1; }
+          done
 
           # Preflight: strip whitespace/newlines from the keys. A trailing newline pasted into a
           # Secret is a common cause of OpenRouter's "Missing Authentication header" (and a broken
