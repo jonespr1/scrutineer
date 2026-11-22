@@ -159,10 +159,11 @@ jobs:
           set -euo pipefail
 
           # Preflight: the tools this script needs. ubuntu-latest has them all; a self-hosted runner
-          # (CI_RUNNER) may not. Fail loudly here, because jq missing would not fail anywhere else:
+          # (CI_RUNNER) may not. Fail loudly here, because several would not fail anywhere else. Without
+          # base64 or iconv the full-file context is silently empty. Without jq it is worse:
           # the de-dupe's jq calls swallow errors, so already_reviewed() would never skip and every
           # "@review" on an unchanged commit would spend a paid round.
-          for tool in gh jq curl; do
+          for tool in gh jq curl base64 iconv; do
             command -v "$tool" >/dev/null 2>&1 || { echo "::error::This runner has no '$tool', which Scrutineer needs. Install it on the runner, or unset CI_RUNNER to use ubuntu-latest."; exit 1; }
           done
 

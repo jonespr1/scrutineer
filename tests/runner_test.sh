@@ -35,7 +35,7 @@ else
 fi
 
 # 3. The preflight must check every tool whose absence fails silently or confusingly.
-for tool in gh jq curl; do
+for tool in gh jq curl base64 iconv; do
   if grep -qE "^ *for tool in .*\\b${tool}\\b" "$REVIEW"; then
     ok "review.yml: preflight checks for $tool"
   else

@@ -15,7 +15,8 @@ Entries below v1.4.6 were not backfilled when this file was resumed; the git his
   the caller's, so a repo that does not set it gets ubuntu-latest exactly as before, and no caller
   file changes. A public repo always gets ubuntu-latest, even with the variable set, so a fork's
   pull request never runs on someone's own machine. A preflight now fails the review loudly if
-  the runner lacks `gh`, `jq` or `curl` (without `jq` the de-dupe failed silently). All of it is
+  the runner lacks `gh`, `jq`, `curl`, `base64` or `iconv` (without `jq` the de-dupe failed
+  silently; without `base64` or `iconv` the full-file context was silently empty). All of it is
   pinned by `tests/runner_test.sh`; `CI_RUNNER` is documented in the README.
 
 ## v1.8.1 (unreleased)
