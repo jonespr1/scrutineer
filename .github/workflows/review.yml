@@ -106,7 +106,13 @@ concurrency:
 
 jobs:
   review:
-    runs-on: 'ubuntu-latest'
+    # Where the review runs. Unset, it is GitHub-hosted ubuntu-latest, as before. A PRIVATE caller
+    # repo can set the repository variable CI_RUNNER to the label of its own self-hosted runner
+    # (for example "pc-docker") to take the review minutes off GitHub's bill. In a called workflow
+    # the vars context is the CALLER's, so each consumer repo opts in for itself and this repo's
+    # own runs are unaffected. Never set CI_RUNNER on a public repo: a fork's pull request would
+    # then start a job on that machine. tests/runner_test.sh pins the fallback.
+    runs-on: "${{ vars.CI_RUNNER || 'ubuntu-latest' }}"
     # Reviewers run in parallel, so wall-clock is the slowest single model call (per-call
     # ceilings are 600s OpenRouter / 240s Gemini) plus checkout - ~11 min worst case. The job
     # ceiling must stay comfortably above the per-call one or it, not curl, becomes the limit.

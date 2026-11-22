@@ -5,6 +5,16 @@ All notable changes to Scrutineer. Callers pin `@v1`, which tracks the latest no
 Entries below v1.4.6 were not backfilled when this file was resumed; the git history for
 `.github/workflows/review.yml` is the record of record for that gap.
 
+## Unreleased
+
+### Added
+- **A consumer repo can run the review on its own runner.** The review job's `runs-on` is now
+  `${{ vars.CI_RUNNER || 'ubuntu-latest' }}`. A private consumer repo sets the repository variable
+  `CI_RUNNER` to its self-hosted runner's label to take the review minutes off GitHub's bill. In
+  a called workflow the `vars` context is the caller's, so a repo that does not set it gets
+  ubuntu-latest exactly as before, and no caller file changes. Never set it on a public repo. The
+  fallback, and this repo's own workflows never reading it, are pinned by `tests/runner_test.sh`.
+
 ## v1.8.1 (unreleased)
 
 ### Fixed
